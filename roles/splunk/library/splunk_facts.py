@@ -1,0 +1,152 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+
+DOCUMENTATION = '''
+---
+module: splunk_facts
+short_description: Gathers facts about Splunk on the given host
+version_added: "1.8"
+options:
+    splunk_home:
+        description: Path to Splunk installation path. If not provided, this
+                     module will check the $SPLUNK_HOME environment variable
+                     and then several commonly used install paths.
+        required: false
+        default: ''
+        version_added: 1.8
+
+description:
+    - This module collects various pieces of data about a Splunk installation
+notes:
+    - Parameters to enable/disable various config or run-time stats may be added later.
+author: "Lowell Alleman <lalleman@turnberrysolutions.com>"
+'''
+
+EXAMPLES = '''
+# Conditional example
+- name: Gather facts
+  action: splunk_facts
+'''
+
+'''
+
+Notes about output layout:
+
+    ansible_splunk_version
+      version
+      build
+      product
+      platform
+    ansible_splunk_dist_search
+      server_public_key
+    ansible_splunk_config
+      <config>
+        <stanza>
+          <key>
+
+'''
+
+
+SPLUNK_HOME_PATH = [
+    "/opt/splunk",
+    "/Applications/Splunk",
+    "/opt/splunkforwarder"
+]
+SPLUNK_VERSION = "etc/splunk.version"
+SPLUNK_DIST_SEARCH_PUB_KEY = "etc/auth/distServerKeys/trusted.pem"
+
+import os
+import re
+
+class SplunkMetadata(object):
+    def __init__(self, module, splunk_home=None):
+        self.module = module
+        if not splunk_home:
+            splunk_home = self.find_splunk_home()
+            if not splunk_home:
+                self.fail("Couldn't locate SPLUNK_HOME.")
+                return
+            self.splunk_home = self.find_splunk_home()
+        self._fail = False
+        self._data = {}
+        self._prefix   = 'ansible_splunk_%s'
+        self.fetch_version()
+        self.fetch_dist_search_keys()
+        self._error = None
+
+
+    def error(self, msg):
+        self._error = msg
+
+    def fail(self, msg):
+        self._error = msg
+        self._fail = True
+
+    def find_splunk_home(self):
+        if "SPLUNK_HOME" in os.environ:
+            return os.environ["SPLUNK_HOME"]
+        for path in SPLUNK_HOME_PATH:
+            if os.path.isdir(path):
+                return path
+        return None
+
+    def fetch_version(self):
+        splunk_version = os.path.join(self.splunk_home, SPLUNK_VERSION)
+        sv = {}
+        try:
+            for line in open(splunk_version):
+                line = line.strip()
+                if line and "=" in line:
+                    (key, value) = line.strip().split("=",1)
+                    sv[key.lower()] = value
+            self._data["version"] = sv
+        except:
+            raise
+            self.fail("Unable to get version info from file:  %s" % splunk_version)
+
+    def fetch_dist_search_keys(self):
+        # NOTE:  To get the correct path, we need to do something like:
+        #           btool distsearch list tokenExchKeys
+        #       and then parse for "certDir" and "publicKey" values.
+        #       But we're just starting with the static default path.
+        pub_key_path = os.path.join(self.splunk_home, SPLUNK_DIST_SEARCH_PUB_KEY)
+        try:
+            pub_key = open(pub_key_path).read()
+            self._data["dist_search"] = dict(server_public_key=pub_key)
+        except:
+            raise
+            self.error("Unable to read distributed search public key: %s" % pub_key_path)
+        self._data["dist_search"]
+
+    def return_facts(self):
+        if self._fail:
+            return dict(failed=True, msg=self._error)
+        sf = {}
+        sf[self._prefix % "home"] = self.splunk_home
+        for (key, value) in self._data.items():
+            sf[self._prefix % key] = value
+        if self._error:
+            sf["msg"] = self._error
+        return dict(changed=False, ansible_facts=sf)
+
+
+def main():
+    module = AnsibleModule(
+        argument_spec = dict(
+            splunk_home = dict(required=False, default=None),
+        ),
+        supports_check_mode = True
+    )
+
+    # Parameters
+    splunk_home = module.params['splunk_home']
+
+    splunk_facts = SplunkMetadata(module, splunk_home=splunk_home)
+    output = splunk_facts.return_facts()
+    module.exit_json(**output)
+
+# import module snippets
+from ansible.module_utils.basic import *
+
+main()
