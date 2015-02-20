@@ -67,7 +67,7 @@ class SplunkMetadata(object):
             if not splunk_home:
                 self.fail("Couldn't locate SPLUNK_HOME.")
                 return
-            self.splunk_home = self.find_splunk_home()
+        self.splunk_home = splunk_home
         self._fail = False
         self._data = {}
         self._prefix   = 'ansible_splunk_%s'
@@ -102,7 +102,6 @@ class SplunkMetadata(object):
                     sv[key.lower()] = value
             self._data["version"] = sv
         except:
-            raise
             self.fail("Unable to get version info from file:  %s" % splunk_version)
 
     def fetch_dist_search_keys(self):
@@ -115,7 +114,6 @@ class SplunkMetadata(object):
             pub_key = open(pub_key_path).read()
             self._data["dist_search"] = dict(server_public_key=pub_key)
         except:
-            raise
             self.error("Unable to read distributed search public key: %s" % pub_key_path)
         self._data["dist_search"]
 
