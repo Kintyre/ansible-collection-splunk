@@ -54,10 +54,14 @@ SPLUNK_HOME_PATH = [
     "/opt/splunkforwarder"
 ]
 SPLUNK_VERSION = "etc/splunk.version"
+SPLUNK_INSTANCE_CFG = "etc/instance.cfg"
+SPLUNK_AUTH_SECRET = "etc/auth/splunk.secret"
 SPLUNK_DIST_SEARCH_PUB_KEY = "etc/auth/distServerKeys/trusted.pem"
+
 
 import os
 import re
+import hashlib
 
 class SplunkMetadata(object):
     def __init__(self, module, splunk_home=None):
@@ -73,6 +77,8 @@ class SplunkMetadata(object):
         self._prefix   = 'ansible_splunk_%s'
         self.fetch_version()
         self.fetch_dist_search_keys()
+        self.fetch_guid()
+        self.fetch_splunksecret()
         self._error = None
 
 
@@ -115,7 +121,25 @@ class SplunkMetadata(object):
             self._data["dist_search"] = dict(server_public_key=pub_key)
         except:
             self.error("Unable to read distributed search public key: %s" % pub_key_path)
-        self._data["dist_search"]
+
+    def fetch_guid(self):
+        # Only looking in the Splunk 6.x location (skipping server.conf)
+        cfg_file = os.path.join(self.splunk_home, SPLUNK_INSTANCE_CFG)
+        try:
+            for line in open(cfg_file):
+                mo = re.match(r"^guid\s*=\s*([A-Fa-f0-9-]+)\s*$", line)
+                if mo:
+                    self._data["guid"] = mo.group(1)
+                    return
+        except:
+           self.error("Unable to read guid from file: %s" % cfg_file)
+
+    def fetch_splunksecret(self):
+        fn = os.path.join(self.splunk_home, SPLUNK_AUTH_SECRET)
+        try:
+            self._data["secret_hash"] = hashlib.md5( open(fn).read() ).hexdigest()
+        except:
+            self.error("Unable to read secret file: %s" % fn)
 
     def return_facts(self):
         if self._fail:
