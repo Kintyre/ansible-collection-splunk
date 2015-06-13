@@ -5,10 +5,9 @@ Ansible module to manage Splunk props via the Splunkd REST API.
 
 
 To-do:
+    - Finish the DOCUMENTATION string with parameters!!
     - Improve error handling.  Not sure what all stuff can throw exceptions.
     - Add support for tracking which keys were updated.  See note below on complexities.
-    - Fix "token" based authentication.
-    - Figure out how to prevent logging of just password/token.
     - Handle round-trip issues.  See notes below.
     - Come up with a way to remove settings.  (Possibly by adding a key and setting it to None/null)
 
@@ -39,7 +38,7 @@ Seems like we should wait until we actually need this functionality before
 adding it.
 """
 
-MODULE_NAME = "splunk_rest_props"
+MODULE_NAME = "splunk_rest_conf"
 
 # CONF_CHOICES:  Not sure if listing config options is a good idea or not.
 # Does the ansible module restrict parameters to this list, or if it still
@@ -55,8 +54,8 @@ DOCUMENTATION = '''
 # If a key doesn't apply to your module (ex: choices, default, or
 # aliases) you can use the word 'null', or an empty list, [], where
 # appropriate.
-module: modulename
-short_description: Ansible module to manage Splunk props via the Splunkd REST API
+module: splunk_rest_conf
+short_description: Ansible module to manage Splunk configurations via the Splunkd REST API
 description:
     - Longer description of the module
     - You might include instructions
@@ -96,9 +95,15 @@ class SplunkRestConf(object):
         from urlparse import urlparse
         up = urlparse(uri)
         port = up.port or 8089
-        service = client.connect(host=up.hostname, port=port, scheme=up.scheme,
-                                 username=username, password=password,
-                                 token=token, owner=owner, app=app, sharing=sharing)
+
+        if not token:
+            service = client.connect(host=up.hostname, port=port, scheme=up.scheme,
+                                     username=username, password=password,
+                                     owner=owner, app=app, sharing=sharing)
+        else:
+            service = client.Service(host=up.hostname, port=port, scheme=up.scheme,
+                                     token=token, owner=owner, app=app, sharing=sharing)
+        
         if not service:
             self.module.fail_json(msg="Failure connecting to Splunkd:  splunklib.client.connect() returned None.")
         self.service = service
@@ -233,10 +238,10 @@ def main():
     module = AnsibleModule(
         argument_spec = dict(
             # Splunkd endpoint and authentication
-            splunkd_uri = dict(default="https://localhost:8089"),
+            splunkd_uri = dict(default="https://localhost:8089", aliases=["uri"]),
             username    = dict(default=None),
-            password    = dict(default=None),
-            token       = dict(default=None),
+            password    = dict(default=None, no_log=True),
+            token       = dict(default=None, no_log=True),
             # Conf settings change
             state       = dict(default='present',
                                choices=['present', 'absent', 'list']),
