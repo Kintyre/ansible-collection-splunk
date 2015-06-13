@@ -24,13 +24,15 @@ author: "Lowell Alleman <lalleman@turnberrysolutions.com>"
 '''
 
 EXAMPLES = '''
-# Conditional example
-- name: Gather facts
-  action: splunk_facts
+
+Typical use:
+- splunk_facts:
+
+Or specify a custom Splunk install home
+- splunk_facts: splunk_home=/opt/acmeco/splunk
 '''
 
 '''
-
 Notes about output layout:
 
     ansible_splunk_version
@@ -137,7 +139,8 @@ class SplunkMetadata(object):
     def fetch_splunksecret(self):
         fn = os.path.join(self.splunk_home, SPLUNK_AUTH_SECRET)
         try:
-            self._data["secret_hash"] = hashlib.md5( open(fn).read() ).hexdigest()
+            # Note could use module.sha1(filename) instead ....
+            self._data["secret_hash"] = hashlib.sha1( open(fn).read() ).hexdigest()
         except:
             self.error("Unable to read secret file: %s" % fn)
 
