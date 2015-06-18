@@ -5,7 +5,7 @@
 DOCUMENTATION = '''
 ---
 module: splunk_facts
-short_description: Gathers facts about Splunk on the given host
+short_description: Gathers facts about a Splunk installation
 version_added: "1.8"
 options:
     splunk_home:
@@ -13,7 +13,7 @@ options:
                      module will check the $SPLUNK_HOME environment variable
                      and then several commonly used install paths.
         required: false
-        default: ''
+        default: null
         version_added: 1.8
 
 description:

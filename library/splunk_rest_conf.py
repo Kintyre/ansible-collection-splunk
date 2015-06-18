@@ -5,12 +5,10 @@ Ansible module to manage Splunk props via the Splunkd REST API.
 
 
 To-do:
-    - Finish the DOCUMENTATION string with parameters!!
     - Improve error handling.  Not sure what all stuff can throw exceptions.
     - Add support for tracking which keys were updated.  See note below on complexities.
     - Handle round-trip issues.  See notes below.
-    - Come up with a way to remove settings.  (Possibly by adding a key and setting it to None/null)
-
+    - Implement the 'del_unknown' option.
 
 ===== Round-trip issues =====
 It's possible that updates to "special" fields like "eai:*" and maybe even
@@ -40,43 +38,173 @@ adding it.
 
 MODULE_NAME = "splunk_rest_conf"
 
-# CONF_CHOICES:  Not sure if listing config options is a good idea or not.
-# Does the ansible module restrict parameters to this list, or if it still
-# accepts other values... If I go with this option, find a way to dynamically
-# UPDATE The DOCUMENTATION string too.
-
-CONF_CHOICES = ["server", "props", "transforms", "macros", ]
-
-
 
 DOCUMENTATION = '''
 ---
-# If a key doesn't apply to your module (ex: choices, default, or
-# aliases) you can use the word 'null', or an empty list, [], where
-# appropriate.
 module: splunk_rest_conf
-short_description: Ansible module to manage Splunk configurations via the Splunkd REST API
+short_description: Manage adhoc configurations via the Splunk REST API
 description:
-    - Longer description of the module
-    - You might include instructions
+    - Manage the content of Splunk C(.conf) files via Ansible.
+    - This module uses the Python Splunk SDK to fetch and modify configuration settings 
+      via the Splunk REST endpoint of a running C(splunkd) service.
+    - Authentication can be handled via either I(username) and I(password) or via I(token).
 version_added: "1.9"
 author: Lowell C. Alleman <lalleman@turnberrysolutions.com>
-notes:
-    - Other things consumers of your module should know
 requirements:
     - splunk-sdk
 options:
 # One or more of the following
-    option_name:
+    splunkd_uri:
         description:
-            - Words go here
-            - that describe
-            - this option
-        required: true or false
-        default: a string or the word null
-        choices: [list, of, choices]
-        aliases: [list, of, aliases]
+            - The Splunkd endpoint of the Splunk server to configure.
+            - Defaults to the local server and default splunkd port.
+        required: false
+        default: https://localhost:8089
+        aliases: [ uri ]
+
+    username:
+        description:
+            - Splunk username for username/password authentication.
+            - When provided, I(password) must also be specified
+        required: false
+        default: null
+
+    password:
+        description:
+            - The password for username/password authentication.
+            - Must be provided if I(username) is provided.
+        required: false
+        default: null
+
+    token:
+        description:
+            - Token to use when authentication has already taken place.
+            - The C(token) can be specified instead of I(username) and I(password)
+            - This module returns an output named I(token) that can be used for
+              subsequent splunkd calls to the same splunkd endpoint. 
+        required: false
+        default: null
+
+    state:
+        description:
+            - Ensure the configuration settings are either present or absent, or to list existing settings.
+            - The C(content) output contains the final setting.
+            - If the state is absent, the C(content) output will be missing if the stanza was previously removed.
+        required: false
+        default: present
+        choices: [present, absent, list]
+
+    conf:
+        description:
+            - The configuration type to manage or view.
+            - The list of choices provided here are for reference only and are not enforced by the module.
+            - Any value supported by the underling Splunk SDK / REST API should work.
+        required: true
+        default: null
+        choices: [ server, props, transforms, macros ]
+
+    stanza:
+        description:
+            - The stanza to edit within the given I(conf) configuration file.
+        required: true
+        default: null
+
+    del_unknown:
+        description:
+            - Not implemented yet! 
+            - Remove any keys in the servers configuration that are not present within the I(settings) dictionary. 
+            - This feature does not yet exist in the code. 
+            - Currently only adding or updated keys or removing the entire stanza is supported. 
+        required: false
+        default: false
+        choices: [ true, false ]
+
+    settings:
+        description:
+            - The dictionary of key/values to push into the given stanza. 
+            - The I(settings) option must be provided when C(state=present). 
+            - The final value of the stanza is returned via the I(content) output. 
+        required: false
+        default: {}
+
+    defaults:
+        description:
+            - The dictionary of key/values to push into a newly created stanza. 
+            - Use this to set stanza defaults that you do not want to override on subsequent runs. 
+            - The I(defaults) option is only used when C(state=present) and a new stanza is created. 
+            - If a new stanza is created, the I(result) output will contain the value C(created). 
+        required: false
+        default: {}
+
+    owner:
+        description:
+            - The Splunk owner (namespace) of the stanza. 
+            - Use the special value of C(nobody) if no owner is desired. 
+            - The value of C(sharing) may also impact the owner. 
+        required: false
+        default: null
+
+    app:
+        description:
+            - The Splunk "app" (namespace) where the stanza lives or will be created. 
+            - The special value of C(system) can be used to indicate no app association. 
+        required: false
+        default: null
+
+    sharing:
+        description:
+            - The Splunk sharing mode to use for stanza creation or modification. 
+            - See the note on "Splunk namespaces" below. 
+            - The default C(global) will create entries that are placed in C(etc/system/local/)
+        required: false
+        default: global
+        choices: [ user, app, global, system ]
+notes:
+    - The I(owner), I(app), and I(sharing) options determine the Splunk namespace. 
+      See U(http://dev.splunk.com/python#namespaces) for more details. 
+
+    - Not all changes take effect immediately.
+      Even though changes are persisted to the config quickly, like editing C(.conf) file by hand,
+      a splunkd restart or endpoint reload may be necessary for some changes to take effect.
+      (The exact behavior is unknown.)
+
 '''
+
+
+EXAMPLES = '''
+Change the minimum free disk space:
+
+    - splunk_rest_conf: state=present username=admin password=manage
+                        conf=server stanza=diskUsage
+      args:
+        settings:
+          minFreeSpace: 3000
+
+For comparison, here's the same (offline) change using ini_file:
+
+    - ini_file: dest={{splunk_home}}/etc/system/local/server.conf
+                section=diskUsage option=minFreeSpace value=3000
+
+
+Here is an example of updating a Splunk license pool.  Note that the
+description and quota are only set the first time the pool is created.  After
+that Ansible will only update the "slaves" key.
+
+
+    -  splunk_rest_conf: splunkd_uri={{splunk_license_master_uri}}
+                        username={{splunk_admin_user}} password={{splunk_admin_pass}}
+                        state=present conf=server stanza=lmpool:MyLicesePool
+      args:
+        settings:
+          slaves: "{{guids}}"
+          stack_id: enterprise
+        defaults:
+          description: NOITCE - The list of slaves is automatically updated by Ansible
+          quota: 1073741824
+'''
+
+
+
 
 
 
@@ -245,8 +373,8 @@ def main():
             # Conf settings change
             state       = dict(default='present',
                                choices=['present', 'absent', 'list']),
-            conf        = dict(required=True, choices=CONF_CHOICES), 
-            stanza      = dict(required=True, aliases=["name"]),
+            conf        = dict(required=True), 
+            stanza      = dict(required=True),
             del_unknown = dict(default='false', choices=BOOLEANS),
             # settings are required when state=present.
             settings    = dict(type='dict', default={}),
