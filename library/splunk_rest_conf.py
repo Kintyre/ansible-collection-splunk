@@ -118,6 +118,21 @@ options:
         default: false
         choices: [ true, false ]
 
+    restart_on_change:
+        description:
+            - Enable an immediate splunkd restart on configuration change.
+        required: false
+        default: false
+        choices: [ true, false ]
+    
+    restart_timeout:
+        description:
+            - Amount of time to wait for the restart to complete.
+            - If I(restart_timeout) is 0 then the restart wait is disabled.
+        required: false
+        default: null
+
+
     settings:
         description:
             - The dictionary of key/values to push into the given stanza. 
@@ -375,7 +390,9 @@ def main():
                                choices=['present', 'absent', 'list']),
             conf        = dict(required=True), 
             stanza      = dict(required=True),
-            del_unknown = dict(default='false', choices=BOOLEANS),
+            del_unknown = dict(type='bool', default='false', choices=BOOLEANS),
+            restart_on_change = dict(type='bool', default='false', choices=BOOLEANS),
+            restart_timeout = dict(type='int', default=None),
             # settings are required when state=present.
             settings    = dict(type='dict', default={}),
             defaults    = dict(type='dict', default={}),
@@ -420,6 +437,11 @@ def main():
         output = srConf.listSettings(p['conf'], p['stanza'])
     else:
         module.fail_json(msg="Unsupported state of '%s'" % p["state"])
+
+    output["restarted"] = False
+    if p["restart_on_change"] and output.get("changed",False):
+        srConf.service.restart(p["restart_timeout"])
+        output["restarted"] = True
 
     # For convenience, pass along some of the input parameters
     output["conf"]   = p["conf"]
