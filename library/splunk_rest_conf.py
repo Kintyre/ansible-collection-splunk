@@ -53,7 +53,6 @@ author: Lowell C. Alleman <lalleman@turnberrysolutions.com>
 requirements:
     - splunk-sdk
 options:
-# One or more of the following
     splunkd_uri:
         description:
             - The Splunkd endpoint of the Splunk server to configure.
@@ -65,7 +64,7 @@ options:
     username:
         description:
             - Splunk username for username/password authentication.
-            - When provided, I(password) must also be specified
+            - When provided, I(password) must also be specified.
         required: false
         default: null
 
@@ -79,7 +78,7 @@ options:
     token:
         description:
             - Token to use when authentication has already taken place.
-            - The C(token) can be specified instead of I(username) and I(password)
+            - The C(token) can be specified instead of I(username) and I(password). 
             - This module returns an output named I(token) that can be used for
               subsequent splunkd calls to the same splunkd endpoint. 
         required: false
@@ -352,6 +351,7 @@ class SplunkRestConf(object):
                 output["failed"] = True
                 output["msg"] = "Unable to delete [%] in %s.conf.  "\
                                 " Exception:  %s" % (stanzaName, confName, e)
+                return output
             output["changed"] = True
         except KeyError:
             output["result"] = "missing"
@@ -391,7 +391,7 @@ def main():
     #   result:     created, updated (merge), deleted
     #   
     #   content:    The dictionary containing the values
-    #   token:      Splunk auth token (for subsequent call?)     - To do
+    #   token:      Splunk auth token (for subsequent call?)
     if not HAVE_SPLUNK_SDK:
         module.fail_json(msg='splunk-sdk required for this module')
 

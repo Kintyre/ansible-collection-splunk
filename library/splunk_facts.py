@@ -9,9 +9,10 @@ short_description: Gathers facts about a Splunk installation
 version_added: "1.8"
 options:
     splunk_home:
-        description: Path to Splunk installation path. If not provided, this
-                     module will check the $SPLUNK_HOME environment variable
-                     and then several commonly used install paths.
+        description:
+            - Path to Splunk installation path. If not provided, this
+              module will check the $SPLUNK_HOME environment variable
+              and then several commonly used install paths.
         required: false
         default: null
         version_added: 1.8
