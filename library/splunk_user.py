@@ -258,7 +258,7 @@ def create_user(module, service, params):
         changes['roles'] = list(new_roles)
         atrsupd.append("roles")
 
-    if realname and realname != user.get("realname", None):
+    if realname and realname != user.realname:
         changes['realname'] = realname
         atrsupd.append("realname")
 
@@ -275,15 +275,16 @@ def create_user(module, service, params):
         atrsupd.append("defaultApp")
 
 
-    if created or changes:
+    output["result"] = "unchanged"
+    if created:
+        output["changed"] = True
+        output["result"] = "created"
+
+    if changes:
         user.update(**changes).refresh()
         output["changed"] = True
-        if created:
-            output["result"] = "created"
-        else:
+        if not created:
             output["result"] = "updated"
-    else:
-        output["result"] = "unchanged"
     
     output["updated_attrs"] = atrsupd
     output["content"] = dict (user.content)
