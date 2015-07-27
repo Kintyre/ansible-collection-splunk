@@ -14,12 +14,12 @@ Session key / token support:
         </auth>
 """
 
-MODULE_NAME = "splunk_control"
+MODULE_NAME = "splunk_cli"
 
 
 DOCUMENTATION = '''
 ---
-module: splunk_control
+module: splunk_cli
 short_description: Splunk command line interface
 description:
     - This is a lightweight wrapper around the Splunk CLI that handles auth parameter hiding and some other niceties.
@@ -66,7 +66,7 @@ options:
         required: true
         default: /opt/splunk
 
-    command:
+    cmd:
         description:
             - Command line arguments to the Splunk CLI
         required: true
@@ -78,9 +78,10 @@ options:
 EXAMPLES = '''
 Reload the deployment server:
 
-- splunk_cli: reload deploy-server
+- splunk_cli: cmd="reload deploy-server"
               splunk_home={{splunk_home}}
-              username={{splunk_os_user}} password={{splunk_os_password}}
+              username={{splunk_admin_user}}
+              password={{splunk_admin_pass}}
 
 '''
 

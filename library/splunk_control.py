@@ -110,7 +110,7 @@ def server_restart(module, service, params):
     timeout = params["timeout"]
 
     outputs["restart_required"] = service.restart_required
-    if when_restart_required and not output["restart_required"]:
+    if when_restart_required and not outputs["restart_required"]:
         outputs["changed"] = False
         return outputs
 
