@@ -1,5 +1,11 @@
 name: Build Collection
 
+
+# Inspiration from:
+#   https://github.com/imjoseangel/ansiblecommon/blob/devel/.github/workflows/release.yml
+#   https://github.com/artis3n/ansible-collection-github/blob/master/.github/workflows/deploy.yml
+
+
 # Controls when the workflow will run
 on:
   push:
@@ -23,28 +29,33 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
+      - name: Get current version
+        id: cversion
+        run: echo "::set-output name=version::$(grep version galaxy.yml | awk -F'"' '{ print $2 }')"
+
       - name: Set up Python 3.9
         uses: actions/setup-python@v2
         with:
           python-version: 3.9
 
-      - name: Build Collection
-        id: collection
-        uses: artis3n/ansible_galaxy_collection@v2
-        with:
-          build: true
-          api_key: '${{ secrets.GALAXY_API_KEY }}'
-          publish: false
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade ansible
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Build Ansible Collection
+        run: ansible-galaxy collection build --force
 
       - name: Create Release
         uses: actions/create-release@v1
         id: create_release
         if: contains(github.ref, 'tags/v')
         env:
-          GITHUB_TOKEN: "{{secrets.GITHUB_TOKEN}}"
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         with:
-          tag_name: "{{github.ref}}"
-          release_name: "Release {{github.ref}}"
+          tag_name: ${{github.ref}}
+          release_name: Release ${{github.ref}}
           draft: false
           prerelease: false
 
@@ -53,10 +64,9 @@ jobs:
         id: upload-release-asset
         if: contains(github.ref, 'tags/v')
         env:
-          GITHUB_TOKEN: "{{secrets.GITHUB_TOKEN}}"
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         with:
-          # I don't know hte names of any of these things, yet ...
-          upload_url: "{{steps.collection.outputs.upload_url}}"
-          asset_path: "{{steps.collection.outputs.path}}"
-          asset_name: "{{steps.collection.outputs.name}}"
-          asset_content_type: application/gzip
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: cdi-splunk-${{steps.cversion.outputs.version}}.tar.gz
+          asset_name: cdi-splunk-${{steps.cversion.outputs.version}}.tar.gz
+          asset_content_type: application/tar+gzip
