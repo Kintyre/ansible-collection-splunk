@@ -1,6 +1,9 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+from __future__ import (absolute_import, division, print_function)
+__metaclass__ = type
+
 
 DOCUMENTATION = '''
 ---
@@ -21,7 +24,7 @@ description:
     - This module collects various pieces of data about a Splunk installation
 notes:
     - Parameters to enable/disable various config or run-time stats may be added later.
-author: "Lowell Alleman <lalleman@turnberrysolutions.com>"
+author: "Lowell Alleman <lowell.alleman@cdillc.com>"
 '''
 
 EXAMPLES = '''
@@ -65,6 +68,9 @@ SPLUNK_DIST_SEARCH_PUB_KEY = "etc/auth/distServerKeys/trusted.pem"
 import os
 import re
 import hashlib
+
+from ansible.module_utils.basic import AnsibleModule
+
 
 class SplunkMetadata(object):
     def __init__(self, module, splunk_home=None):
@@ -172,7 +178,6 @@ def main():
     output = splunk_facts.return_facts()
     module.exit_json(**output)
 
-# import module snippets
-from ansible.module_utils.basic import *
 
-main()
+if __name__ == '__main__':
+    main()

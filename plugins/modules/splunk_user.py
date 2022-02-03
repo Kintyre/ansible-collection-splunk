@@ -4,15 +4,17 @@
 Ansible module to manage Splunk users via the Splunkd REST API.
 """
 
+from __future__ import (absolute_import, division, print_function)
+__metaclass__ = type
+
 MODULE_NAME = "splunk_user"
 
 
 # Search path for Splunk SDK, which is bundled as part of some Splunk apps
 # This is only used if the splunklib import fails
 SPLUNK_SDK_SEARCH_PATH = [
-    "lib/python27/site-packages"
+    "lib/python37/site-packages",
     "etc/apps/splunk_management_console/bin",
-    "etc/apps/framework/contrib/splunk-sdk-python"
 ]
 
 
@@ -25,7 +27,7 @@ description:
     - This module uses the Python Splunk SDK and requires access to the splunkd administrative port.
     - Authentication can be handled via either I(username) and I(password) or via I(token).
 version_added: "1.9"
-author: Lowell C. Alleman <lalleman@turnberrysolutions.com>
+author: Lowell C. Alleman <lowell.alleman@cdillc.com>
 requirements:
     - splunk-sdk
 options:
@@ -58,7 +60,7 @@ options:
             - Token to use when authentication has already taken place.
             - The C(token) can be specified instead of I(username) and I(password).
             - This module returns an output named I(token) that can be used for
-              subsequent splunkd calls to the same splunkd endpoint. 
+              subsequent splunkd calls to the same splunkd endpoint.
         required: false
         default: null
 
@@ -72,7 +74,7 @@ options:
     state:
         description:
             - Ensure the user is either present or absent; or list the contents of the user's configuration.
-            - Users that already existing will be updated as specified, except for I(splunk_pass). 
+            - Users that already existing will be updated as specified, except for I(splunk_pass).
             - The C(content) output contains the final setting.
             - If the state is absent, the C(content) output will be missing
               if the stanza was previously removed.
@@ -94,7 +96,7 @@ options:
     append_roles:
         description:
             - When true, the specified I(roles) will be appended to the user's existing roles.
-            - Otherwise, the roles will be replaced as-is. 
+            - Otherwise, the roles will be replaced as-is.
         required: false
         default: false
         choices: [ true, false ]
@@ -179,6 +181,9 @@ Change the password of existing user 'joe':
 import os
 import sys
 
+from ansible.module_utils.basic import AnsibleModule, BOOLEANS
+
+
 
 def import_splunk_sdk(splunk_home=None, search_paths=None):
     sys_path_reset = None
@@ -209,7 +214,7 @@ def evil_ssl_nocertcheck_hack():
         ssl._create_default_https_context = ssl._create_unverified_context
 
 def connect(module, uri, username, password, token=None, owner=None, app=None, sharing=None):
-    from urlparse import urlparse
+    from ansible.module_utils.six.moves.urllib.parse import urlparse
     up = urlparse(uri)
     port = up.port or 8089
     if not token:
@@ -285,7 +290,7 @@ def create_user(module, service, params):
         output["changed"] = True
         if not created:
             output["result"] = "updated"
-    
+
     output["updated_attrs"] = atrsupd
     output["content"] = dict (user.content)
     output["endpoint"] = str(user.links['edit'])
@@ -302,7 +307,7 @@ def delete_user(module, service, params):
         output["result"] = "deleted"
         try:
             user.delete()
-        except Exception, e:
+        except Exception as e:
             output["failed"] = True
             output["msg"] = "Unable to delete user '%s'  Exception:  %s" % (splunk_user, e)
             return output
@@ -334,6 +339,7 @@ def list_user(module, service, params):
 
 def main():
     global client
+
     module = AnsibleModule(
         argument_spec = dict(
             # Splunkd endpoint and authentication
@@ -381,7 +387,7 @@ def main():
 
     try:
         service = connect(module, p['splunkd_uri'], p['username'], p['password'], p['token'], sharing="system")
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg="Unable to connect to splunkd.  Exception: %s" % e)
 
     if p["state"] == "present":
@@ -401,12 +407,10 @@ def main():
     output["_splunksdk_path"] = client.__file__
     module.exit_json(**output)
 
-client = import_splunk_sdk()
+if __name__ == '__main__':
+    client = import_splunk_sdk()
+    main()
 
-# import module snippets
-from ansible.module_utils.basic import *
-
-main()
 
 # Reset ugliness of SSL hack (this could matter when Ansible is running in pipelining mode)
 if __default__create_default_https_context:

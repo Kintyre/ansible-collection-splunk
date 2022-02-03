@@ -36,6 +36,10 @@ Seems like we should wait until we actually need this functionality before
 adding it.
 """
 
+from __future__ import (absolute_import, division, print_function)
+__metaclass__ = type
+
+
 MODULE_NAME = "splunk_rest_conf"
 
 
@@ -45,11 +49,11 @@ module: splunk_rest_conf
 short_description: Manage adhoc configurations via the Splunk REST API
 description:
     - Manage the content of Splunk C(.conf) files via Ansible.
-    - This module uses the Python Splunk SDK to fetch and modify configuration settings 
+    - This module uses the Python Splunk SDK to fetch and modify configuration settings
       via the Splunk REST endpoint of a running C(splunkd) service.
     - Authentication can be handled via either I(username) and I(password) or via I(token).
 version_added: "1.9"
-author: Lowell C. Alleman <lalleman@turnberrysolutions.com>
+author: Lowell C. Alleman <lowell.alleman@cdillc.com>
 requirements:
     - splunk-sdk
 options:
@@ -78,9 +82,9 @@ options:
     token:
         description:
             - Token to use when authentication has already taken place.
-            - The C(token) can be specified instead of I(username) and I(password). 
+            - The C(token) can be specified instead of I(username) and I(password).
             - This module returns an output named I(token) that can be used for
-              subsequent splunkd calls to the same splunkd endpoint. 
+              subsequent splunkd calls to the same splunkd endpoint.
         required: false
         default: null
 
@@ -110,10 +114,10 @@ options:
 
     del_unknown:
         description:
-            - Not implemented yet! 
-            - Remove any keys in the servers configuration that are not present within the I(settings) dictionary. 
-            - This feature does not yet exist in the code. 
-            - Currently only adding or updated keys or removing the entire stanza is supported. 
+            - Not implemented yet!
+            - Remove any keys in the servers configuration that are not present within the I(settings) dictionary.
+            - This feature does not yet exist in the code.
+            - Currently only adding or updated keys or removing the entire stanza is supported.
         required: false
         default: false
         choices: [ true, false ]
@@ -124,7 +128,7 @@ options:
         required: false
         default: false
         choices: [ true, false ]
-    
+
     restart_timeout:
         description:
             - Amount of time to wait for the restart to complete.
@@ -135,47 +139,47 @@ options:
 
     settings:
         description:
-            - The dictionary of key/values to push into the given stanza. 
-            - The I(settings) option must be provided when C(state=present). 
-            - The final value of the stanza is returned via the I(content) output. 
+            - The dictionary of key/values to push into the given stanza.
+            - The I(settings) option must be provided when C(state=present).
+            - The final value of the stanza is returned via the I(content) output.
         required: false
         default: {}
 
     defaults:
         description:
-            - The dictionary of key/values to push into a newly created stanza. 
-            - Use this to set stanza defaults that you do not want to override on subsequent runs. 
-            - The I(defaults) option is only used when C(state=present) and a new stanza is created. 
-            - If a new stanza is created, the I(result) output will contain the value C(created). 
+            - The dictionary of key/values to push into a newly created stanza.
+            - Use this to set stanza defaults that you do not want to override on subsequent runs.
+            - The I(defaults) option is only used when C(state=present) and a new stanza is created.
+            - If a new stanza is created, the I(result) output will contain the value C(created).
         required: false
         default: {}
 
     owner:
         description:
-            - The Splunk owner (namespace) of the stanza. 
-            - Use the special value of C(nobody) if no owner is desired. 
-            - The value of C(sharing) may also impact the owner. 
+            - The Splunk owner (namespace) of the stanza.
+            - Use the special value of C(nobody) if no owner is desired.
+            - The value of C(sharing) may also impact the owner.
         required: false
         default: null
 
     app:
         description:
-            - The Splunk "app" (namespace) where the stanza lives or will be created. 
-            - The special value of C(system) can be used to indicate no app association. 
+            - The Splunk "app" (namespace) where the stanza lives or will be created.
+            - The special value of C(system) can be used to indicate no app association.
         required: false
         default: null
 
     sharing:
         description:
-            - The Splunk sharing mode to use for stanza creation or modification. 
-            - See the note on "Splunk namespaces" below. 
+            - The Splunk sharing mode to use for stanza creation or modification.
+            - See the note on "Splunk namespaces" below.
             - The default C(global) will create entries that are placed in C(etc/system/local/)
         required: false
         default: global
         choices: [ user, app, global, system ]
 notes:
-    - The I(owner), I(app), and I(sharing) options determine the Splunk namespace. 
-      See U(http://dev.splunk.com/python#namespaces) for more details. 
+    - The I(owner), I(app), and I(sharing) options determine the Splunk namespace.
+      See U(http://dev.splunk.com/python#namespaces) for more details.
 
     - Not all changes take effect immediately.
       Even though changes are persisted to the config quickly, like editing C(.conf) file by hand,
@@ -218,8 +222,7 @@ that Ansible will only update the "slaves" key.
 '''
 
 
-
-
+from ansible.module_utils.basic import BOOLEANS, AnsibleModule
 
 
 try:
@@ -234,7 +237,7 @@ class SplunkRestConf(object):
         self.module = module
 
     def connectUri(self, uri, username, password, token=None, owner=None, app=None, sharing=None):
-        from urlparse import urlparse
+        from ansible.module_utils.six.moves.urllib.parse import urlparse
         up = urlparse(uri)
         port = up.port or 8089
 
@@ -245,7 +248,7 @@ class SplunkRestConf(object):
         else:
             service = client.Service(host=up.hostname, port=port, scheme=up.scheme,
                                      token=token, owner=owner, app=app, sharing=sharing)
-        
+
         if not service:
             self.module.fail_json(msg="Failure connecting to Splunkd:  splunklib.client.connect() returned None.")
         self.service = service
@@ -279,17 +282,17 @@ class SplunkRestConf(object):
             if str(baseline[key]) != str(value):
                 return False
         return True
-    
+
     def applySettings(self, confName, stanzaName, settings, defaults=None, del_unknown=False):
         """
         Create or update a record
         """
+        output = {}
         if del_unknown:
             output["failed"] = True
             output["msg"] = "The 'del_unknown' functionality hasn't been implemented yet!"
             return
         stanza_dict = {}
-        output = {}
         created = False
         do_update = False
 
@@ -325,12 +328,11 @@ class SplunkRestConf(object):
 
         #output["stanza_dict"] = stanza_dict          #DEBUGGING
         output["content"] = dict(stanza.content)
-        #output["content_inital"] = init_content     # For debugging
+        #output["content_initital"] = init_content     # For debugging
         output["changed"] = created or do_update    # Or is it better to do a before/after comparison?
         #output["changed_dictdiff"] = init_content != output["content"]      # DEBUGGING
         output["endpoint"] = str(stanza.links['edit'])
         return output
-
 
     def listSettings(self, confName, stanzaName):
         """
@@ -362,7 +364,7 @@ class SplunkRestConf(object):
             output["result"] = "deleted"
             try:
                 stanza.delete()
-            except Exception, e:
+            except Exception as e:
                 output["failed"] = True
                 output["msg"] = "Unable to delete [%] in %s.conf.  "\
                                 " Exception:  %s" % (stanzaName, confName, e)
@@ -388,7 +390,7 @@ def main():
             # Conf settings change
             state       = dict(default='present',
                                choices=['present', 'absent', 'list']),
-            conf        = dict(required=True), 
+            conf        = dict(required=True),
             stanza      = dict(required=True),
             del_unknown = dict(type='bool', default='false', choices=BOOLEANS),
             restart_on_change = dict(type='bool', default='false', choices=BOOLEANS),
@@ -406,7 +408,7 @@ def main():
 
     # Outputs
     #   result:     created, updated (merge), deleted
-    #   
+    #
     #   content:    The dictionary containing the values
     #   token:      Splunk auth token (for subsequent call?)
     if not HAVE_SPLUNK_SDK:
@@ -420,10 +422,10 @@ def main():
                              "or (2) token parameter for Splunkd authentication" % (MODULE_NAME,))
 
     try:
-        srConf.connectUri(p['splunkd_uri'], p['username'], 
+        srConf.connectUri(p['splunkd_uri'], p['username'],
                           p['password'], p['token'],
                           p["owner"], p["app"], p["sharing"])
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg="Unable to connect to splunkd.  Exception: %s" % e)
 
     if p["state"] == "present":
@@ -452,7 +454,6 @@ def main():
     output["params"] = p
     module.exit_json(**output)
 
-# import module snippets
-from ansible.module_utils.basic import *
 
-main()
+if __name__ == '__main__':
+    main()

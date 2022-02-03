@@ -6,13 +6,18 @@ Ansible module to run the Splunk command line interface
 
 Session key / token support:
     File:  $SPLUNK_HOME/.splunk/authToken_{{inventory_hostname}}_{{splunkd_port}}
-    Content: 
+    Content:
         <auth>
             <username>{{username}}</username>
             <sessionkey>{{ token | replace("Splunk ","") }}</sessionkey>
             <cookie>splunkd_{{splunkd_port}}</cookie>
         </auth>
 """
+
+from __future__ import (absolute_import, division, print_function)
+__metaclass__ = type
+
+
 
 MODULE_NAME = "splunk_cli"
 
@@ -25,7 +30,7 @@ description:
     - This is a lightweight wrapper around the Splunk CLI that handles auth parameter hiding and some other niceties.
     - If the Splunk command requires authentication, provide the I(username) and I(password) options.
 version_added: "1.9"
-author: Lowell C. Alleman <lalleman@turnberrysolutions.com>
+author: Lowell C. Alleman <lowell.alleman@cdillc.com>
 requirements:
     - splunk-sdk
 options:
@@ -54,9 +59,9 @@ options:
 #    token:
 #        description:
 #            - Token to use when authentication has already taken place.
-#            - The C(token) can be specified instead of I(username) and I(password). 
+#            - The C(token) can be specified instead of I(username) and I(password).
 #            - This module returns an output named I(token) that can be used for
-#              subsequent splunkd calls to the same splunkd endpoint. 
+#              subsequent splunkd calls to the same splunkd endpoint.
 #        required: false
 #        default: null
 
@@ -78,17 +83,22 @@ options:
 EXAMPLES = '''
 Reload the deployment server:
 
-- splunk_cli: cmd="reload deploy-server"
-              splunk_home={{splunk_home}}
-              username={{splunk_admin_user}}
-              password={{splunk_admin_pass}}
-
+- splunk_cli:
+    cmd: reload deploy-server
+    splunk_home: "{{splunk_home}}"
+    username: "{{splunk_admin_user}}"
+    password: "{{splunk_admin_pass}}"
 '''
 
 import os
 import shlex
 import datetime
 import re
+
+from ansible.module_utils.basic import AnsibleModule
+
+
+# from ansible.module_utils.splitter import *
 
 
 
@@ -139,7 +149,7 @@ def main():
             # Borrowed from the shell/command module
             creates     = dict(default=None),
             removes     = dict(default=None),
-            create_on_sucess = dict(default=None),
+            create_on_success = dict(default=None),
         )
     )
     args        = module.params["cmd"]
@@ -149,7 +159,7 @@ def main():
     splunk_pass = module.params['password']
     creates     = module.params['creates']
     removes     = module.params['removes']
-    create_on_sucess = module.params['create_on_sucess']
+    create_on_success = module.params['create_on_success']
 
     if (splunk_user or splunk_pass) and not (splunk_user and splunk_pass):
         module.fail_json(msg="Both 'username' and 'password' must be specified at the same time.")
@@ -185,7 +195,7 @@ def main():
 
     args = shlex.split(args)
     executable = os.path.join(splunk_home, "bin", "splunk")
-    startd = datetime.datetime.now()
+    start_time = datetime.datetime.now()
 
     # Make sure that 'splunk' is the first argument
     if args[0] != "splunk":
@@ -201,29 +211,26 @@ def main():
 
     rc, out, err = module.run_command(args, executable=executable, use_unsafe_shell=False)
 
-    endd = datetime.datetime.now()
-    delta = endd - startd
+    end_time = datetime.datetime.now()
+    delta = end_time - start_time
 
     if out is None:
         out = ''
     if err is None:
         err = ''
 
-    if rc == 0 and create_on_sucess:
-        open(os.path.expanduser(create_on_sucess),"w").write("MARKER FILE CREATED")
+    if rc == 0 and create_on_success:
+        open(os.path.expanduser(create_on_success),"w").write("MARKER FILE CREATED")
     module.exit_json(
         cmd      = args,
         stdout   = out.rstrip("\r\n"),
         stderr   = err.rstrip("\r\n"),
         rc       = rc,
-        start    = str(startd),
-        end      = str(endd),
+        start    = str(start_time),
+        end      = str(end_time),
         delta    = str(delta),
         changed  = True,
     )
 
-# import module snippets
-from ansible.module_utils.basic import *
-from ansible.module_utils.splitter import *
 
 main()

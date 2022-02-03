@@ -4,6 +4,10 @@
 Ansible module to control the Splunkd service using the REST API.
 """
 
+from __future__ import (absolute_import, division, print_function)
+__metaclass__ = type
+
+
 MODULE_NAME = "splunk_control"
 
 
@@ -16,7 +20,7 @@ description:
     - This module uses the Python Splunk SDK and requires access to the splunkd administrative port.
     - Authentication can be handled via either I(username) and I(password) or via I(token).
 version_added: "1.9"
-author: Lowell C. Alleman <lalleman@turnberrysolutions.com>
+author: Lowell C. Alleman <lowell.alleman@cdillc.com>
 requirements:
     - splunk-sdk
 options:
@@ -45,9 +49,9 @@ options:
     token:
         description:
             - Token to use when authentication has already taken place.
-            - The C(token) can be specified instead of I(username) and I(password). 
+            - The C(token) can be specified instead of I(username) and I(password).
             - This module returns an output named I(token) that can be used for
-              subsequent splunkd calls to the same splunkd endpoint. 
+              subsequent splunkd calls to the same splunkd endpoint.
         required: false
         default: null
 
@@ -81,6 +85,11 @@ Restart the Splunkd service and wait for it to come back online:
 - splunk_control: state=restarted username=admin password=manage
 '''
 
+from ansible.module_utils.six.moves.urllib.parse import urlencode, urlparse
+from ansible.module_utils.six.moves.urllib.request import Request, urlopen
+
+from ansible.module_utils.basic import AnsibleModule, BOOLEANS
+
 try:
     import splunklib.client as client
     HAVE_SPLUNK_SDK = True
@@ -89,7 +98,7 @@ except ImportError:
 
 
 def connect(module, uri, username, password, token=None, owner=None, app=None, sharing=None):
-    from urlparse import urlparse
+
     up = urlparse(uri)
     port = up.port or 8089
     if not token:
@@ -137,15 +146,15 @@ if sys.version_info >= (2, 7, 9):
 
 
 def connect_nosdk(module, base_url, username, password, token=None):
-    import urllib, urllib2
+
     from xml.dom import minidom
     c = dict(base_url=base_url)
     if token:
         c["session_key"] = token
     else:
-        authdata = urllib.urlencode({'username': username, 'password': password})
-        request = urllib2.Request(base_url + '/services/auth/login', data=authdata, **urlopenkwargs)
-        server_content = urllib2.urlopen(request)
+        authdata = urlencode({'username': username, 'password': password})
+        request = Request(base_url + '/services/auth/login', data=authdata, **urlopenkwargs)
+        server_content = urlopen(request)
         session_key = minidom.parseString(server_content.read()).\
             getElementsByTagName('sessionKey')[0].childNodes[0].nodeValue
         c["session_key"] = session_key
@@ -153,9 +162,8 @@ def connect_nosdk(module, base_url, username, password, token=None):
 
 def server_restart_nosdk(module, conn, params):
     outputs = {}
-    import urllib, urllib2, time
+    import time
     from xml.dom import minidom
-    from urlparse import urlparse
     base_url = conn["base_url"]
     session_key = conn["session_key"]
     timeout = params["timeout"]
@@ -165,8 +173,8 @@ def server_restart_nosdk(module, conn, params):
     if not session_key.startswith("Splunk "):
         session_key = "Splunk " + session_key
 
-    request = urllib2.Request(base_url + '/services/server/control/restart', 
-                              data="", headers=dict(Authorization=session_key), **urlopenkwargs)
+    request = Request(base_url + '/services/server/control/restart',
+                      data="", headers=dict(Authorization=session_key), **urlopenkwargs)
     if timeout:
         # Wait for it to go down
         ping_it(up.hostname, port, timeout/2, "down")
@@ -174,12 +182,12 @@ def server_restart_nosdk(module, conn, params):
         time.sleep(1)
         ping_it(up.hostname, port, timeout/2)
 
-    results = urllib2.urlopen(request)
+    results = urlopen(request)
     outputs["info"] = str(results.info())
     outputs["read"] = str(results.read())
     outputs["changed"] = True
     # To-do.  Implement some kind of ping waiting for the server to come back online.
-    return outputs 
+    return outputs
 
 
 def ping_it(host, port, timeout=300, wait_for="up"):
@@ -246,7 +254,7 @@ def main():
     if HAVE_SPLUNK_SDK:
         try:
             service = connect(module, p['splunkd_uri'], p['username'], p['password'], p['token'])
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg="Unable to connect to splunkd.  Exception: %s" % e)
     else:
         service = connect_nosdk(module, p['splunkd_uri'], p['username'], p['password'], p['token'])
@@ -269,7 +277,7 @@ def main():
     output["have_sdk"] = HAVE_SPLUNK_SDK
     module.exit_json(**output)
 
-# import module snippets
-from ansible.module_utils.basic import *
 
-main()
+
+if __name__ == '__main__':
+    main()
