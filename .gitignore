@@ -1,2 +1,6 @@
 venv
 *.tar.gz
+
+
+# Ansible lint
+.cache

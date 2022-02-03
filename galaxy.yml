@@ -16,7 +16,7 @@ readme: README.md
 # A list of the collection's content authors. Can be just the name or in the format 'Full Name <email> (url)
 # @nicks:irc/im.site#channel'
 authors:
-- Lowell Alleman <lowell.alleman@cdillc.com>
+  - Lowell Alleman <lowell.alleman@cdillc.com>
 
 
 ### OPTIONAL but strongly recommended
@@ -26,7 +26,7 @@ description: Splunk related modules for configuring and maintaining a Splunk env
 # Either a single license or a list of licenses for content inside of a collection. Ansible Galaxy currently only
 # accepts L(SPDX,https://spdx.org/licenses/) licenses. This key is mutually exclusive with 'license_file'
 license:
-- Apache-2.0
+  - Apache-2.0
 
 # The path to the license file for the collection. This path is relative to the root of the collection. This key is
 # mutually exclusive with 'license'
@@ -58,7 +58,6 @@ issues: https://github.com/Kintyre/ansible-collection-splunk/issues
 # artifact. A pattern is matched from the relative path of the file or directory of the collection directory. This
 # uses 'fnmatch' to match the files or directories. Some directories and files like 'galaxy.yml', '*.pyc', '*.retry',
 # and '.git' are always filtered
-build_ignore: [
-    ".gitignore",
-    "venv",
-]
+build_ignore:
+  - ".*"
+  - "venv"

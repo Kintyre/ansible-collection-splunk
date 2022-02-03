@@ -1,0 +1,32 @@
+---
+repos:
+  - repo: https://github.com/ansible-community/ansible-lint.git
+    rev: v5.3.2
+    hooks:
+      - id: ansible-lint
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.1.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: (\.md|\.csv)$
+      - id: end-of-file-fixer
+        exclude: (\.md|\.csv)$
+      - id: check-ast
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=200"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/PyCQA/isort.git
+    rev: 5.10.1
+    hooks:
+      - id: isort
+
+  - repo: https://github.com/pre-commit/mirrors-autopep8
+    rev: v1.6.0
+    hooks:
+      - id: autopep8
