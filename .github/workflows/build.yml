@@ -22,17 +22,18 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
-      
+
       - name: Set up Python 3.9
         uses: actions/setup-python@v2
         with:
           python-version: 3.9
-      
+
       - name: Build Collection
         id: collection
         uses: artis3n/ansible_galaxy_collection@v2
         with:
-          # api_key: '${{ secrets.GALAXY_API_KEY }}'
+          build: true
+          api_key: '${{ secrets.GALAXY_API_KEY }}'
           publish: false
 
       - name: Create Release
