@@ -4,3 +4,4 @@ venv
 
 # Ansible lint
 .cache
+.vscode

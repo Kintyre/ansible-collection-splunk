@@ -4,7 +4,15 @@
 Ansible module to control the Splunkd service using the REST API.
 """
 
-from __future__ import (absolute_import, division, print_function)
+from __future__ import absolute_import, division, print_function
+
+import sys
+import time
+
+from ansible.module_utils.basic import BOOLEANS, AnsibleModule
+from ansible.module_utils.six.moves.urllib.parse import urlencode, urlparse
+from ansible.module_utils.six.moves.urllib.request import Request, urlopen
+
 __metaclass__ = type
 
 
@@ -85,10 +93,6 @@ Restart the Splunkd service and wait for it to come back online:
 - splunk_control: state=restarted username=admin password=manage
 '''
 
-from ansible.module_utils.six.moves.urllib.parse import urlencode, urlparse
-from ansible.module_utils.six.moves.urllib.request import Request, urlopen
-
-from ansible.module_utils.basic import AnsibleModule, BOOLEANS
 
 try:
     import splunklib.client as client
@@ -109,7 +113,8 @@ def connect(module, uri, username, password, token=None, owner=None, app=None, s
         service = client.Service(host=up.hostname, port=port, scheme=up.scheme,
                                  token=token, owner=owner, app=app, sharing=sharing)
     if not service:
-        module.fail_json(msg="Failure connecting to Splunkd:  splunklib.client.connect() returned None.")
+        module.fail_json(msg="Failure connecting to Splunkd:   "
+                         "splunklib.client.connect() returned None.")
     return service
 
 
@@ -131,22 +136,19 @@ def server_restart(module, service, params):
     return outputs
 
 
-
-
-
 #### Implementation without the Python Splunk SDK installed ###################
-import sys
+
 urlopenkwargs = {}
 
 if sys.version_info >= (2, 7, 9):
     import ssl
-    #ssl._create_default_https_context = ssl._create_unverified_context
+
+    # ssl._create_default_https_context = ssl._create_unverified_context
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
     urlopenkwargs["context"] = ssl_context
 
 
 def connect_nosdk(module, base_url, username, password, token=None):
-
     from xml.dom import minidom
     c = dict(base_url=base_url)
     if token:
@@ -160,10 +162,9 @@ def connect_nosdk(module, base_url, username, password, token=None):
         c["session_key"] = session_key
     return c
 
+
 def server_restart_nosdk(module, conn, params):
     outputs = {}
-    import time
-    from xml.dom import minidom
     base_url = conn["base_url"]
     session_key = conn["session_key"]
     timeout = params["timeout"]
@@ -192,14 +193,13 @@ def server_restart_nosdk(module, conn, params):
 
 def ping_it(host, port, timeout=300, wait_for="up"):
     import socket
-    import time
-    maxtime =  time.time() + timeout
+    maxtime = time.time() + timeout
     s = None
     while time.time() < maxtime:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(5)
-            s.connect((host,port))
+            s.connect((host, port))
             # print "Connection opened!"
             if wait_for == "up":
                 break
@@ -215,29 +215,27 @@ def ping_it(host, port, timeout=300, wait_for="up"):
 #### END Implementation without the Python Splunk SDK installed ###############
 
 
-
 def main():
     global HAVE_SPLUNK_SDK
     module = AnsibleModule(
-        argument_spec = dict(
+        argument_spec=dict(
             # Splunkd endpoint and authentication
-            splunkd_uri = dict(default="https://localhost:8089", aliases=["uri"]),
-            username    = dict(default=None),
-            password    = dict(default=None, no_log=True),
-            token       = dict(default=None, no_log=True),
-            splunk_home = dict(default=None),
+            splunkd_uri=dict(default="https://localhost:8089", aliases=["uri"]),
+            username=dict(default=None),
+            password=dict(default=None, no_log=True),
+            token=dict(default=None, no_log=True),
+            splunk_home=dict(default=None),
             # Settings for module behavior
-            state       = dict(default='running',
-                               choices=['running', 'restarted', 'offlined']),
-            timeout     = dict(type='int', default=300),
-            when_restart_required = dict(type='bool', default='false', choices=BOOLEANS),
+            state=dict(default='running',
+                       choices=['running', 'restarted', 'offlined']),
+            timeout=dict(type='int', default=300),
+            when_restart_required=dict(type='bool', default='false', choices=BOOLEANS),
             # Hidden params
-            no_sdk      = dict(type='bool', default="false", choices=BOOLEANS)
+            no_sdk=dict(type='bool', default="false", choices=BOOLEANS)
         )
     )
 
     p = module.params
-
 
     # Mostly for testing...
     if p["no_sdk"]:
@@ -259,7 +257,6 @@ def main():
     else:
         service = connect_nosdk(module, p['splunkd_uri'], p['username'], p['password'], p['token'])
 
-
     if p["state"] == "restarted":
         if HAVE_SPLUNK_SDK:
             output = server_restart(module, service, module.params)
@@ -276,7 +273,6 @@ def main():
     output["params"] = p
     output["have_sdk"] = HAVE_SPLUNK_SDK
     module.exit_json(**output)
-
 
 
 if __name__ == '__main__':

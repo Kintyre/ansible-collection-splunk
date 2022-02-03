@@ -14,9 +14,16 @@ Session key / token support:
         </auth>
 """
 
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
+from __future__ import absolute_import, division, print_function
 
+import datetime
+import os
+import re
+import shlex
+
+from ansible.module_utils.basic import AnsibleModule
+
+__metaclass__ = type
 
 
 MODULE_NAME = "splunk_cli"
@@ -90,27 +97,18 @@ Reload the deployment server:
     password: "{{splunk_admin_pass}}"
 '''
 
-import os
-import shlex
-import datetime
-import re
-
-from ansible.module_utils.basic import AnsibleModule
-
 
 # from ansible.module_utils.splitter import *
 
 
-
-
 # Dict of options and their defaults
 OPTIONS = {
-    'splunk_home' : None,
-    'splunk_uri' : None,
-    'username' : None,
-    'password' : None,
+    'splunk_home': None,
+    'splunk_uri': None,
+    'username': None,
+    'password': None,
     'creates': None,
-    'removes' : None
+    'removes': None
 }
 
 # This is a pretty complex regex, which functions as follows:
@@ -136,29 +134,28 @@ PARAM_REGEX = re.compile(
 )
 
 
-
 def main():
     module = AnsibleModule(
-        argument_spec = dict(
-            cmd = dict(),
-            splunk_home = dict(required=True),
-            splunk_uri  = dict(default=None, aliases=["uri", "splunkd_uri"]),
-            username    = dict(default=None),
-            password    = dict(default=None, no_log=True),
-#            token       = dict(default=None, no_log=True),
+        argument_spec=dict(
+            cmd=dict(),
+            splunk_home=dict(required=True),
+            splunk_uri=dict(default=None, aliases=["uri", "splunkd_uri"]),
+            username=dict(default=None),
+            password=dict(default=None, no_log=True),
+            # token=dict(default=None, no_log=True),
             # Borrowed from the shell/command module
-            creates     = dict(default=None),
-            removes     = dict(default=None),
-            create_on_success = dict(default=None),
+            creates=dict(default=None),
+            removes=dict(default=None),
+            create_on_success=dict(default=None),
         )
     )
-    args        = module.params["cmd"]
+    args = module.params["cmd"]
     splunk_home = module.params["splunk_home"]
-    splunk_uri  = module.params['splunk_uri']
+    splunk_uri = module.params['splunk_uri']
     splunk_user = module.params['username']
     splunk_pass = module.params['password']
-    creates     = module.params['creates']
-    removes     = module.params['removes']
+    creates = module.params['creates']
+    removes = module.params['removes']
     create_on_success = module.params['create_on_success']
 
     if (splunk_user or splunk_pass) and not (splunk_user and splunk_pass):
@@ -188,7 +185,7 @@ def main():
         v = os.path.expanduser(removes)
         if not os.path.exists(v):
             module.exit_json(
-                cmd=args,  changed=False, rc=0,
+                cmd=args, changed=False, rc=0,
                 stdout="skipped, since %s does not exist" % v,
                 stderr=False
             )
@@ -220,16 +217,16 @@ def main():
         err = ''
 
     if rc == 0 and create_on_success:
-        open(os.path.expanduser(create_on_success),"w").write("MARKER FILE CREATED")
+        open(os.path.expanduser(create_on_success), "w").write("MARKER FILE CREATED")
     module.exit_json(
-        cmd      = args,
-        stdout   = out.rstrip("\r\n"),
-        stderr   = err.rstrip("\r\n"),
-        rc       = rc,
-        start    = str(start_time),
-        end      = str(end_time),
-        delta    = str(delta),
-        changed  = True,
+        cmd=args,
+        stdout=out.rstrip("\r\n"),
+        stderr=err.rstrip("\r\n"),
+        rc=rc,
+        start=str(start_time),
+        end=str(end_time),
+        delta=str(delta),
+        changed=True,
     )
 
 

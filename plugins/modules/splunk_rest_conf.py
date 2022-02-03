@@ -36,7 +36,10 @@ Seems like we should wait until we actually need this functionality before
 adding it.
 """
 
-from __future__ import (absolute_import, division, print_function)
+from __future__ import absolute_import, division, print_function
+
+from ansible.module_utils.basic import BOOLEANS, AnsibleModule
+
 __metaclass__ = type
 
 
@@ -217,12 +220,9 @@ that Ansible will only update the "slaves" key.
           slaves: "{{guids}}"
           stack_id: enterprise
         defaults:
-          description: NOITCE - The list of slaves is automatically updated by Ansible
+          description: NOTICE - The list of slaves is automatically updated by Ansible
           quota: 1073741824
 '''
-
-
-from ansible.module_utils.basic import BOOLEANS, AnsibleModule
 
 
 try:
@@ -250,7 +250,8 @@ class SplunkRestConf(object):
                                      token=token, owner=owner, app=app, sharing=sharing)
 
         if not service:
-            self.module.fail_json(msg="Failure connecting to Splunkd:  splunklib.client.connect() returned None.")
+            self.module.fail_json(msg="Failure connecting to Splunkd:  "
+                                  "splunklib.client.connect() returned None.")
         self.service = service
 
     def getToken(self):
@@ -326,11 +327,12 @@ class SplunkRestConf(object):
             # Refresh my local copy based on what the server accepted
             stanza.refresh()
 
-        #output["stanza_dict"] = stanza_dict          #DEBUGGING
+        # output["stanza_dict"] = stanza_dict          #DEBUGGING
         output["content"] = dict(stanza.content)
-        #output["content_initital"] = init_content     # For debugging
-        output["changed"] = created or do_update    # Or is it better to do a before/after comparison?
-        #output["changed_dictdiff"] = init_content != output["content"]      # DEBUGGING
+        # output["content_initital"] = init_content     # For debugging
+        # Or is it better to do a before/after comparison?
+        output["changed"] = created or do_update
+        # output["changed_dictdiff"] = init_content != output["content"]      # DEBUGGING
         output["endpoint"] = str(stanza.links['edit'])
         return output
 
@@ -351,7 +353,6 @@ class SplunkRestConf(object):
         output["endpoint"] = str(stanza.links['list'])
         return output
 
-
     def deleteSettings(self, confName, stanzaName):
         """
         Remove an existing configuration record, if it exists.
@@ -366,7 +367,7 @@ class SplunkRestConf(object):
                 stanza.delete()
             except Exception as e:
                 output["failed"] = True
-                output["msg"] = "Unable to delete [%] in %s.conf.  "\
+                output["msg"] = "Unable to delete [%s] in %s.conf.  "\
                                 " Exception:  %s" % (stanzaName, confName, e)
                 return output
             output["changed"] = True
@@ -378,31 +379,30 @@ class SplunkRestConf(object):
         return output
 
 
-
 def main():
     module = AnsibleModule(
-        argument_spec = dict(
+        argument_spec=dict(
             # Splunkd endpoint and authentication
-            splunkd_uri = dict(default="https://localhost:8089", aliases=["uri"]),
-            username    = dict(default=None),
-            password    = dict(default=None, no_log=True),
-            token       = dict(default=None, no_log=True),
+            splunkd_uri=dict(default="https://localhost:8089", aliases=["uri"]),
+            username=dict(default=None),
+            password=dict(default=None, no_log=True),
+            token=dict(default=None, no_log=True),
             # Conf settings change
-            state       = dict(default='present',
-                               choices=['present', 'absent', 'list']),
-            conf        = dict(required=True),
-            stanza      = dict(required=True),
-            del_unknown = dict(type='bool', default='false', choices=BOOLEANS),
-            restart_on_change = dict(type='bool', default='false', choices=BOOLEANS),
-            restart_timeout = dict(type='int', default=None),
+            state=dict(default='present',
+                       choices=['present', 'absent', 'list']),
+            conf=dict(required=True),
+            stanza=dict(required=True),
+            del_unknown=dict(type='bool', default='false', choices=BOOLEANS),
+            restart_on_change=dict(type='bool', default='false', choices=BOOLEANS),
+            restart_timeout=dict(type='int', default=None),
             # settings are required when state=present.
-            settings    = dict(type='dict', default={}),
-            defaults    = dict(type='dict', default={}),
+            settings=dict(type='dict', default={}),
+            defaults=dict(type='dict', default={}),
             # Splunk namespace options
-            owner       = dict(default=None),
-            app         = dict(default=None),
-            sharing     = dict(default="global",
-                               choices=["user", "app", "global", "system"])
+            owner=dict(default=None),
+            app=dict(default=None),
+            sharing=dict(default="global",
+                         choices=["user", "app", "global", "system"])
         )
     )
 
@@ -441,15 +441,15 @@ def main():
         module.fail_json(msg="Unsupported state of '%s'" % p["state"])
 
     output["restarted"] = False
-    if p["restart_on_change"] and output.get("changed",False):
+    if p["restart_on_change"] and output.get("changed", False):
         srConf.service.restart(p["restart_timeout"])
         output["restarted"] = True
 
     # For convenience, pass along some of the input parameters
-    output["conf"]   = p["conf"]
+    output["conf"] = p["conf"]
     output["stanza"] = p["stanza"]
     # Add auth 'token' which can be used for subsequent calls in the same play.
-    output["token"]  = srConf.getToken()
+    output["token"] = srConf.getToken()
     # DEBUG, or is this worth keeping?
     output["params"] = p
     module.exit_json(**output)

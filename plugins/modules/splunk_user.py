@@ -4,8 +4,16 @@
 Ansible module to manage Splunk users via the Splunkd REST API.
 """
 
-from __future__ import (absolute_import, division, print_function)
+from __future__ import absolute_import, division, print_function
+
+import os
+import ssl
+import sys
+
+from ansible.module_utils.basic import BOOLEANS, AnsibleModule
+
 __metaclass__ = type
+
 
 MODULE_NAME = "splunk_user"
 
@@ -178,40 +186,41 @@ Change the password of existing user 'joe':
                splunk_user=joe splunk_pass=NewPassWord
 '''
 
-import os
-import sys
-
-from ansible.module_utils.basic import AnsibleModule, BOOLEANS
-
-
 
 def import_splunk_sdk(splunk_home=None, search_paths=None):
     sys_path_reset = None
     if splunk_home:
-        sys_path_rest = list(sys.path)
+        # Take a backup copy
+        sys_path_reset = list(sys.path)
         for p in search_paths:
-            sys.path.append( os.path.join(splunk_home, p))
+            sys.path.append(os.path.join(splunk_home, p))
     try:
         import splunklib.client as client
+
         # Assume that we only need to do this with Splunk SDK living under the SPLUNK_HOME; OS-level install should be up-to-date via other mechanisms.
         evil_ssl_nocertcheck_hack()
     except ImportError:
         client = None
     if sys_path_reset:
-        sys.path = sys_path_reset
+        del sys.path[:]
+        sys.path.extend(sys_path_reset)
     return client
 
+
 __default__create_default_https_context = None
+
+
 def evil_ssl_nocertcheck_hack():
     """
     For newer versions of Python (2.7.9) and older version of the splunk-sdk,
     this hack lets us revert to the old behavior and keep thing moving.
     """
+    global __default__create_default_https_context
     import splunklib
     if splunklib.__version__ <= "1.3.1" and sys.version_info >= (2, 7, 9):
-        import ssl
         __default__create_default_https_context = ssl._create_default_https_context
         ssl._create_default_https_context = ssl._create_unverified_context
+
 
 def connect(module, uri, username, password, token=None, owner=None, app=None, sharing=None):
     from ansible.module_utils.six.moves.urllib.parse import urlparse
@@ -225,20 +234,21 @@ def connect(module, uri, username, password, token=None, owner=None, app=None, s
         service = client.Service(host=up.hostname, port=port, scheme=up.scheme,
                                  token=token, owner=owner, app=app, sharing=sharing)
     if not service:
-        module.fail_json(msg="Failure connecting to Splunkd:  splunklib.client.connect() returned None.")
+        module.fail_json(msg="Failure connecting to Splunkd:  "
+                         "splunklib.client.connect() returned None.")
     return service
 
 
 def create_user(module, service, params):
-    splunk_user =   params["splunk_user"]
-    splunk_pass =   params["splunk_pass"]
-    roles =         [ r.strip() for r in params["roles"].split(",") ]
-    realname =      params["realname"]
-    tz =            params["tz"]
-    email =         params["email"]
-    defaultapp =    params["defaultapp"]
-    update_password=params["update_password"]
-    append_roles =  params["append_roles"]
+    splunk_user = params["splunk_user"]
+    splunk_pass = params["splunk_pass"]
+    roles = [r.strip() for r in params["roles"].split(",")]
+    realname = params["realname"]
+    tz = params["tz"]
+    email = params["email"]
+    defaultapp = params["defaultapp"]
+    update_password = params["update_password"]
+    append_roles = params["append_roles"]
 
     output = {}
     changes = {}
@@ -251,7 +261,8 @@ def create_user(module, service, params):
             changes["password"] = splunk_pass
             atrsupd.append("password")
     except KeyError:
-        user = service.users.create(username=splunk_user, password=splunk_pass, roles=roles)
+        user = service.users.create(username=splunk_user, password=splunk_pass,
+                                    roles=roles)
         atrsupd.extend(["user", "password", "roles"])
         created = True
 
@@ -279,7 +290,6 @@ def create_user(module, service, params):
         changes['defaultApp'] = defaultapp
         atrsupd.append("defaultApp")
 
-
     output["result"] = "unchanged"
     if created:
         output["changed"] = True
@@ -292,7 +302,7 @@ def create_user(module, service, params):
             output["result"] = "updated"
 
     output["updated_attrs"] = atrsupd
-    output["content"] = dict (user.content)
+    output["content"] = dict(user.content)
     output["endpoint"] = str(user.links['edit'])
     return output
 
@@ -319,49 +329,51 @@ def delete_user(module, service, params):
         output["content"] = {}
     return output
 
+
 def list_user(module, service, params):
-        """
-        Return an existing user record
-        """
-        splunk_user = params["splunk_user"]
-        output = {}
-        try:
-            user = service.users[splunk_user]
-            output["result"] = "present"
-        except KeyError:
-            output["result"] = "missing"
-            output["msg"] = "Unable to find user '%s'" % (splunk_user)
-            output["failed"] = True
-            return output
-        output["content"] = dict(user.content)
-        output["endpoint"] = str(user.links['list'])
+    """
+    Return an existing user record
+    """
+    splunk_user = params["splunk_user"]
+    output = {}
+    try:
+        user = service.users[splunk_user]
+        output["result"] = "present"
+    except KeyError:
+        output["result"] = "missing"
+        output["msg"] = "Unable to find user '%s'" % (splunk_user)
+        output["failed"] = True
         return output
+    output["content"] = dict(user.content)
+    output["endpoint"] = str(user.links['list'])
+    return output
+
 
 def main():
     global client
 
     module = AnsibleModule(
-        argument_spec = dict(
+        argument_spec=dict(
             # Splunkd endpoint and authentication
-            splunkd_uri = dict(default="https://localhost:8089", aliases=["uri"]),
-            username    = dict(default=None),
-            password    = dict(default=None, no_log=True),
-            token       = dict(default=None, no_log=True),
-            splunk_home = dict(default=None),
+            splunkd_uri=dict(default="https://localhost:8089", aliases=["uri"]),
+            username=dict(default=None),
+            password=dict(default=None, no_log=True),
+            token=dict(default=None, no_log=True),
+            splunk_home=dict(default=None),
             # Settings for module behavior
-            state       = dict(default='present',
-                               choices=['present', 'absent', 'list']),
-            update_password = dict(type='bool', default='false', choices=BOOLEANS),
-            append_roles    = dict(type='bool', default='false', choices=BOOLEANS),
+            state=dict(default='present',
+                       choices=['present', 'absent', 'list']),
+            update_password=dict(type='bool', default='false', choices=BOOLEANS),
+            append_roles=dict(type='bool', default='false', choices=BOOLEANS),
             # User settings
-            splunk_user = dict(required=True),
-            splunk_pass = dict(default=None, no_log=True),
-            roles       = dict(default="user"),
-            tz          = dict(default=None),
-            realname    = dict(default=None),
-            defaultapp  = dict(default=None),
-            email       = dict(default=None)
-        )
+            splunk_user=dict(required=True),
+            splunk_pass=dict(default=None, no_log=True),
+            roles=dict(default="user"),
+            tz=dict(default=None),
+            realname=dict(default=None),
+            defaultapp=dict(default=None),
+            email=dict(default=None)
+        ),
     )
 
     # Outputs
@@ -380,13 +392,13 @@ def main():
     if client is None:
         module.fail_json(msg='splunk-sdk required for this module')
 
-
     if not ((p["username"] and p["password"]) or p["token"]):
         module.fail_json(msg="%s requires either (1) 'username' and 'password' parameters, "
                              "or (2) token parameter for Splunkd authentication" % (MODULE_NAME,))
 
     try:
-        service = connect(module, p['splunkd_uri'], p['username'], p['password'], p['token'], sharing="system")
+        service = connect(module, p['splunkd_uri'], p['username'],
+                          p['password'], p['token'], sharing="system")
     except Exception as e:
         module.fail_json(msg="Unable to connect to splunkd.  Exception: %s" % e)
 
@@ -401,11 +413,12 @@ def main():
 
     # For convenience, pass along some of the input parameters
     # Add auth 'token' which can be used for subsequent calls in the same play.
-    output["token"]  = service.token
+    output["token"] = service.token
     # DEBUG, or is this worth keeping?
     output["params"] = p
     output["_splunksdk_path"] = client.__file__
     module.exit_json(**output)
+
 
 if __name__ == '__main__':
     client = import_splunk_sdk()
