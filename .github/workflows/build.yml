@@ -33,7 +33,7 @@ jobs:
 
       - name: Get current version
         id: cversion
-        run: echo "::set-output name=version::$(grep version galaxy.yml | awk -F'"' '{ print $2 }')"
+        run: echo "::set-output name=version::$(grep ^version galaxy.yml | awk -F'"' '{ print $2 }')"
 
       - name: Set up Python 3.9
         uses: actions/setup-python@v2
