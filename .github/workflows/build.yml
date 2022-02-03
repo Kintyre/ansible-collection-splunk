@@ -1,0 +1,61 @@
+name: Build Collection
+
+# Controls when the workflow will run
+on:
+  push:
+    tags:
+    - 'v*'
+    branches:
+    - main
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+      
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      
+      - name: Build Collection
+        id: collection
+        uses: artis3n/ansible_galaxy_collection@v2
+        with:
+          # api_key: '${{ secrets.GALAXY_API_KEY }}'
+          publish: false
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        id: create_release
+        if: contains(github.ref, 'tags/v')
+        env:
+          GITHUB_TOKEN: "{{secrets.GITHUB_TOKEN}}"
+        with:
+          tag_name: "{{github.ref}}"
+          release_name: "Release {{github.ref}}"
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        id: upload-release-asset
+        if: contains(github.ref, 'tags/v')
+        env:
+          GITHUB_TOKEN: "{{secrets.GITHUB_TOKEN}}"
+        with:
+          # I don't know hte names of any of these things, yet ...
+          upload_url: "{{steps.collection.outputs.upload_url}}"
+          asset_path: "{{steps.collection.outputs.path}}"
+          asset_name: "{{steps.collection.outputs.name}}"
+          asset_content_type: application/gzip
