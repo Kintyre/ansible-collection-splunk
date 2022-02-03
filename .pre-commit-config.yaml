@@ -3,7 +3,10 @@ repos:
   - repo: https://github.com/ansible-community/ansible-lint.git
     rev: v5.3.2
     hooks:
+    # Note this is set with 'always_run' true; so our file/exclues mean nothing
       - id: ansible-lint
+        # files: \.(yaml|yml)$
+        # exclude: (github/workflows/|pre-commit-config)
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.1.0
