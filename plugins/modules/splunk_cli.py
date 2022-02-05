@@ -1,5 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+# Heavy inspiration from https://github.com/ansible/ansible/blob/devel/lib/ansible/modules/command.py
+
 """
 Ansible module to run the Splunk command line interface
 
@@ -18,9 +20,9 @@ from __future__ import absolute_import, division, print_function
 
 import datetime
 import os
-import re
 import shlex
 
+from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import AnsibleModule
 
 __metaclass__ = type
@@ -34,12 +36,25 @@ DOCUMENTATION = '''
 module: splunk_cli
 short_description: Splunk command line interface
 description:
-    - This is a lightweight wrapper around the Splunk CLI that handles auth parameter hiding and some other niceties.
-    - If the Splunk command requires authentication, provide the I(username) and I(password) options.
+    - This is a lightweight wrapper around the Splunk CLI that handles auth
+      parameter hiding and some other niceties.
+    - If the Splunk command requires authentication, provide the I(username) and
+      I(password) options.
 version_added: "1.9"
 author: Lowell C. Alleman <lowell.alleman@cdillc.com>
-requirements:
-    - splunk-sdk
+attributes:
+    check_mode:
+        details: while the command itself is arbitrary and cannot be subject to
+                 the check mode semantics it adds C(creates)/C(removes) options
+                 as a workaround
+        support: partial
+    diff_mode:
+        support: none
+    platform:
+      support: full
+      platforms: posix
+    raw:
+      support: full
 options:
     splunkd_uri:
         description:
@@ -98,43 +113,11 @@ Reload the deployment server:
 '''
 
 
-# from ansible.module_utils.splitter import *
-
-
-# Dict of options and their defaults
-OPTIONS = {
-    'splunk_home': None,
-    'splunk_uri': None,
-    'username': None,
-    'password': None,
-    'creates': None,
-    'removes': None
-}
-
-# This is a pretty complex regex, which functions as follows:
-#
-# 1. (^|\s)
-# ^ look for a space or the beginning of the line
-# 2. ({options_list})=
-# ^ expanded to (chdir|creates|executable...)=
-#   look for a valid param, followed by an '='
-# 3. (?P<quote>[\'"])?
-# ^ look for an optional quote character, which can either be
-#   a single or double quote character, and store it for later
-# 4. (.*?)
-# ^ match everything in a non-greedy manner until...
-# 5. (?(quote)(?<!\\)(?P=quote))((?<!\\)(?=\s)|$)
-# ^ a non-escaped space or a non-escaped quote of the same kind
-#   that was matched in the first 'quote' is found, or the end of
-#   the line is reached
-OPTIONS_REGEX = '|'.join(OPTIONS.keys())
-PARAM_REGEX = re.compile(
-    r'(^|\s)(' + OPTIONS_REGEX +
-    r')=(?P<quote>[\'"])?(.*?)(?(quote)(?<!\\)(?P=quote))((?<!\\)(?=\s)|$)'
-)
-
-
 def main():
+    # Note attempting to use '_raw_params' here, like `command`` does, doesn't
+    # work.  Apparently you must be on the the "special list" (RAW_PARAM_MODULES)
+    # this must be something that Ansible wants to restrict.
+    # Therefore cmd="..." syntax must be use.
     module = AnsibleModule(
         argument_spec=dict(
             cmd=dict(),
@@ -165,7 +148,12 @@ def main():
         module.fail_json(rc=256, msg="no command given")
 
     splunk_home = os.path.abspath(os.path.expanduser(splunk_home))
-    os.chdir(splunk_home)
+
+    # Q: Why chdir to splunk home, should the caller have control of this?
+    try:
+        os.chdir(splunk_home)
+    except (IOError, OSError) as e:
+        module.fail_json(rc=257, msg='Unable to change directory before execution: %s' % to_text(e))
 
     if creates:
         # do not run the command if the line contains creates=filename
@@ -203,6 +191,7 @@ def main():
         args.append("%s:%s" % (splunk_user, splunk_pass))
 
     if splunk_uri:
+        # Tell splunk CLI to issue command to remote Splunk instance
         args.append("-uri")
         args.append(splunk_uri)
 
@@ -220,14 +209,15 @@ def main():
         open(os.path.expanduser(create_on_success), "w").write("MARKER FILE CREATED")
     module.exit_json(
         cmd=args,
-        stdout=out.rstrip("\r\n"),
-        stderr=err.rstrip("\r\n"),
+        stdout=to_text(out).rstrip("\r\n"),
+        stderr=to_text(err).rstrip("\r\n"),
         rc=rc,
-        start=str(start_time),
-        end=str(end_time),
-        delta=str(delta),
+        start=to_text(start_time),
+        end=to_text(end_time),
+        delta=to_text(delta),
         changed=True,
     )
 
 
-main()
+if __name__ == '__main__':
+    main()

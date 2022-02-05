@@ -6,6 +6,7 @@ Ansible module to control the Splunkd service using the REST API.
 
 from __future__ import absolute_import, division, print_function
 
+import ssl
 import sys
 import time
 
@@ -90,7 +91,7 @@ options:
 EXAMPLES = '''
 Restart the Splunkd service and wait for it to come back online:
 
-- splunk_control: state=restarted username=admin password=manage
+- cdi.splunk.splunk_control: state=restarted username=admin password=manage
 '''
 
 
@@ -140,10 +141,10 @@ def server_restart(module, service, params):
 
 urlopenkwargs = {}
 
-if sys.version_info >= (2, 7, 9):
-    import ssl
+if sys.version_info >= (3, 5):
+    urlopenkwargs["context"] = ssl._create_unverified_context()
+elif sys.version_info >= (2, 7, 9) and sys.version_info <= (3, 0, 0):
 
-    # ssl._create_default_https_context = ssl._create_unverified_context
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
     urlopenkwargs["context"] = ssl_context
 
@@ -155,8 +156,8 @@ def connect_nosdk(module, base_url, username, password, token=None):
         c["session_key"] = token
     else:
         authdata = urlencode({'username': username, 'password': password})
-        request = Request(base_url + '/services/auth/login', data=authdata, **urlopenkwargs)
-        server_content = urlopen(request)
+        request = Request(base_url + '/services/auth/login', data=authdata.encode("utf-8"))
+        server_content = urlopen(request, **urlopenkwargs)
         session_key = minidom.parseString(server_content.read()).\
             getElementsByTagName('sessionKey')[0].childNodes[0].nodeValue
         c["session_key"] = session_key
@@ -175,7 +176,8 @@ def server_restart_nosdk(module, conn, params):
         session_key = "Splunk " + session_key
 
     request = Request(base_url + '/services/server/control/restart',
-                      data="", headers=dict(Authorization=session_key), **urlopenkwargs)
+                      method="POST",
+                      data=None, headers=dict(Authorization=session_key))
     if timeout:
         # Wait for it to go down
         ping_it(up.hostname, port, timeout/2, "down")
@@ -183,7 +185,7 @@ def server_restart_nosdk(module, conn, params):
         time.sleep(1)
         ping_it(up.hostname, port, timeout/2)
 
-    results = urlopen(request)
+    results = urlopen(request, **urlopenkwargs)
     outputs["info"] = str(results.info())
     outputs["read"] = str(results.read())
     outputs["changed"] = True
@@ -200,13 +202,13 @@ def ping_it(host, port, timeout=300, wait_for="up"):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(5)
             s.connect((host, port))
-            # print "Connection opened!"
+            # print("Connection opened!")
             if wait_for == "up":
                 break
         except socket.error:
             if wait_for == "down":
                 break
-            # print "Can't connect yet..."
+            # print("Can't connect yet...")
         finally:
             if s:
                 s.close()
@@ -239,11 +241,7 @@ def main():
 
     # Mostly for testing...
     if p["no_sdk"]:
-        HAVE_SPLUNK_SDK = 0
-    else:
-        HAVE_SPLUNK_SDK
-
-        #module.fail_json(msg='splunk-sdk required for this module')
+        HAVE_SPLUNK_SDK = False
 
     if not ((p["username"] and p["password"]) or p["token"]):
         module.fail_json(msg="%s requires either (1) 'username' and 'password' parameters, "
