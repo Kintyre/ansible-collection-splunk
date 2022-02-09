@@ -12,6 +12,7 @@ import sys
 
 from ansible.module_utils.basic import BOOLEANS, AnsibleModule
 
+
 __metaclass__ = type
 
 
@@ -34,7 +35,7 @@ description:
     - Create, delete, and update local Splunk user accounts with Ansible.
     - This module uses the Python Splunk SDK and requires access to the splunkd administrative port.
     - Authentication can be handled via either I(username) and I(password) or via I(token).
-version_added: "1.9"
+version_added: "0.9.0"
 author: Lowell C. Alleman <lowell.alleman@cdillc.com>
 requirements:
     - splunk-sdk

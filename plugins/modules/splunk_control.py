@@ -14,6 +14,7 @@ from ansible.module_utils.basic import BOOLEANS, AnsibleModule
 from ansible.module_utils.six.moves.urllib.parse import urlencode, urlparse
 from ansible.module_utils.six.moves.urllib.request import Request, urlopen
 
+
 __metaclass__ = type
 
 
@@ -25,11 +26,11 @@ DOCUMENTATION = '''
 module: splunk_control
 short_description: Control the Splunkd service
 description:
-    - Restart the Splunkd service using Ansible
+    - Restart the Splunkd service using Ansible.
     - This module uses the Python Splunk SDK and requires access to the splunkd administrative port.
     - Authentication can be handled via either I(username) and I(password) or via I(token).
-version_added: "1.9"
-author: Lowell C. Alleman <lowell.alleman@cdillc.com>
+version_added: "0.10.0"
+author: Lowell C. Alleman (@lowell80)
 requirements:
     - splunk-sdk
 options:

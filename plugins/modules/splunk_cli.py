@@ -25,6 +25,7 @@ import shlex
 from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import AnsibleModule
 
+
 __metaclass__ = type
 
 
@@ -40,8 +41,8 @@ description:
       parameter hiding and some other niceties.
     - If the Splunk command requires authentication, provide the I(username) and
       I(password) options.
-version_added: "1.9"
-author: Lowell C. Alleman <lowell.alleman@cdillc.com>
+version_added: "0.9.0"
+author: Lowell C. Alleman (@lowell80)
 attributes:
     check_mode:
         details: while the command itself is arbitrary and cannot be subject to

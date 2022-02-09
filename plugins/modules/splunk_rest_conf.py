@@ -40,6 +40,7 @@ from __future__ import absolute_import, division, print_function
 
 from ansible.module_utils.basic import BOOLEANS, AnsibleModule
 
+
 __metaclass__ = type
 
 
@@ -55,8 +56,8 @@ description:
     - This module uses the Python Splunk SDK to fetch and modify configuration settings
       via the Splunk REST endpoint of a running C(splunkd) service.
     - Authentication can be handled via either I(username) and I(password) or via I(token).
-version_added: "1.9"
-author: Lowell C. Alleman <lowell.alleman@cdillc.com>
+version_added: "0.10.0"
+author: Lowell C. Alleman (@lowell80)
 requirements:
     - splunk-sdk
 options:

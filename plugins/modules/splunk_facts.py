@@ -9,6 +9,7 @@ import re
 
 from ansible.module_utils.basic import AnsibleModule
 
+
 __metaclass__ = type
 
 
@@ -16,7 +17,8 @@ DOCUMENTATION = '''
 ---
 module: splunk_facts
 short_description: Gathers facts about a Splunk installation
-version_added: "1.8"
+version_added: "0.10.0"
+author: Lowell C. Alleman (@lowell80)
 options:
     splunk_home:
         description:
@@ -31,7 +33,7 @@ description:
     - This module collects various pieces of data about a Splunk installation
 notes:
     - Parameters to enable/disable various config or run-time stats may be added later.
-author: "Lowell Alleman <lowell.alleman@cdillc.com>"
+
 '''
 
 EXAMPLES = '''
@@ -59,7 +61,6 @@ Notes about output layout:
           <key>
 
 '''
-
 
 SPLUNK_HOME_PATH = [
     "/opt/splunk",
