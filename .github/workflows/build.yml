@@ -3,7 +3,8 @@
 name: Build Ansible Collection
 
 env:
-  package: lowell80.splunk
+  # Note the use of "-" in the package name (not ".")
+  package: lowell80-splunk
 
 # Inspiration from:
 #   https://github.com/imjoseangel/ansiblecommon/blob/devel/.github/workflows/release.yml
@@ -51,7 +52,7 @@ jobs:
 
       - name: Build Ansible Collection
         run: |
-          ansible-galaxy collection build --output-path ${{github.workspace}} --force
+          ansible-galaxy collection build --force
           echo "Contents of ${{github.workspace}}"
           ls -lsh "${{github.workspace}}"
 
@@ -75,10 +76,10 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{github.workspace}}/${{env.package}}-${{steps.cversion.outputs.version}}.tar.gz
+          asset_path: ${{env.package}}-${{steps.cversion.outputs.version}}.tar.gz
           asset_name: ${{env.package}}-${{steps.cversion.outputs.version}}.tar.gz
           asset_content_type: application/tar+gzip
 
       - name: Deploy Ansible collection to Galaxy
-        run: ansible-galaxy collection publish ${{github.workspace}}/${{env.package}}-${{ steps.cversion.outputs.version }}.tar.gz --api-key ${{ secrets.GALAXY_API_KEY }}
+        run: ansible-galaxy collection publish ${{env.package}}-${{ steps.cversion.outputs.version }}.tar.gz --api-key ${{ secrets.GALAXY_API_KEY }}
         if: contains(github.ref, 'tags/v')
