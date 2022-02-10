@@ -146,7 +146,7 @@ options:
             - The dictionary of key/values to push into the given stanza.
             - The I(settings) option must be provided when C(state=present).
             - The final value of the stanza is returned via the I(content) output.
-        required: when C(state=present)
+        required: false
         default: {}
 
     defaults:
