@@ -2,7 +2,7 @@
 # The namespace of the collection. This can be a company/brand/organization or product namespace under which all
 # content lives. May only contain alphanumeric lowercase characters and underscores. Namespaces cannot start with
 # underscores or numbers and cannot contain consecutive underscores
-namespace: cdi
+namespace: lowell80
 
 # The name of the collection. Has the same character restrictions as 'namespace'
 name: splunk
@@ -61,3 +61,4 @@ issues: https://github.com/Kintyre/ansible-collection-splunk/issues
 build_ignore:
   - ".*"
   - "venv"
+  - "*.tar.gz"

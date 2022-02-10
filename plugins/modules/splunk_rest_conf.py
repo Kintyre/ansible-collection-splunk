@@ -38,7 +38,7 @@ adding it.
 
 from __future__ import absolute_import, division, print_function
 
-from ansible.module_utils.basic import BOOLEANS, AnsibleModule
+from ansible.module_utils.basic import AnsibleModule
 
 
 __metaclass__ = type
@@ -124,14 +124,14 @@ options:
             - Currently only adding or updated keys or removing the entire stanza is supported.
         required: false
         default: false
-        choices: [ true, false ]
+        type: bool
 
     restart_on_change:
         description:
             - Enable an immediate splunkd restart on configuration change.
         required: false
         default: false
-        choices: [ true, false ]
+        type: bool
 
     restart_timeout:
         description:
@@ -146,7 +146,7 @@ options:
             - The dictionary of key/values to push into the given stanza.
             - The I(settings) option must be provided when C(state=present).
             - The final value of the stanza is returned via the I(content) output.
-        required: false
+        required: when C(state=present)
         default: {}
 
     defaults:
@@ -393,8 +393,8 @@ def main():
                        choices=['present', 'absent', 'list']),
             conf=dict(required=True),
             stanza=dict(required=True),
-            del_unknown=dict(type='bool', default='false', choices=BOOLEANS),
-            restart_on_change=dict(type='bool', default='false', choices=BOOLEANS),
+            del_unknown=dict(type='bool', default=False),
+            restart_on_change=dict(type='bool', default=False),
             restart_timeout=dict(type='int', default=None),
             # settings are required when state=present.
             settings=dict(type='dict', default={}),

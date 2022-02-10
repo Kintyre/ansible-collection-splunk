@@ -7,7 +7,7 @@ import datetime
 import os
 
 from ansible.module_utils._text import to_text
-from ansible.module_utils.basic import BOOLEANS, AnsibleModule
+from ansible.module_utils.basic import AnsibleModule
 from ksconf.package import AppPackager
 
 
@@ -15,12 +15,12 @@ __metaclass__ = type
 
 MODULE_NAME = "ksconf_package"
 
-DOCUMENTATION = '''
+DOCUMENTATION = r'''
 ---
 module: ksconf_package
-short_description: Create a Splunk app/add-on I(.spl) file from a directory
+short_description: Create a Splunk app from a local directory
 description:
-    - Build a Splunk app using the ksconf package functionality.
+    - Build a Splunk app using the I(ksconf package) functionality.
     - The source directory may contain layers
 version_added: "0.10.0"
 author: Lowell C. Alleman (@lowell80)
@@ -44,10 +44,10 @@ options:
         required: true
 
     file:
-        description:
-            - Tarball file created of the app.  This can be I(.spl) or I(.tar.gz)
-            - This parameter supports dynamic placeholders.
-            - Variables are listed here: https://ksconf.readthedocs.io/en/stable/cmd_package.html#variables
+        description: >
+            Tarball file created of the app.  This can be I(.spl) or I(.tar.gz)
+            This parameter supports dynamic placeholders.
+            Variables are listed L(here,https://ksconf.readthedocs.io/en/stable/cmd_package.html#variables)
         type: path
         required: true
 
@@ -58,7 +58,7 @@ options:
         default: []
 
     layer_method:
-        description:
+        description: Type of layers used within the I(source) directory.
         choices: ["auto", "dir.d", "disable"]
         default: dir.d
 
@@ -72,13 +72,11 @@ options:
         default: []
         suboptions:
             include:
+                description: Specify a layer or layer glob pattern to include.
                 type: str
             exclude:
+                description: Specify a layer or layer glob pattern to exclude.
                 type: str
-            mutually_exclusive:
-                - [include,exclude]
-            required_one_of:
-                - [include,exclude]
 
     local:
         description:
@@ -94,7 +92,7 @@ options:
         description:
             - Follow symbolic links pointing to directories.
             - Symlinks to files are always followed.
-        type: boolean
+        type: bool
         default: false
 
     app_name:
@@ -105,20 +103,73 @@ options:
           - Placeholder variables, such as ``{{app_id}}`` can be used here.
         type: str
 
+    context:
+        description:
+            -Free-form metadata that is passed through to the output.
+            - Use this to pass around important app context variables that can
+              be conveniently retained when looping and using C(register).
+        type: dict
+
 # set_version
 # set_build
 
 
 notes:
     - Add comments about magic vars
-
-
 '''
 
-EXAMPLES = '''
-Reload the deployment server:
 
-- cdi.splunk.ksconf_package:
+RETURN_ = r'''
+app_name:
+    description: >
+        Final name of the splunk app, which is the top-level directory
+        included in the generated archive.
+    type: str
+    returned: always
+    sample: org_custom_tech
+archive:
+    description: >
+        The location where the generated archive lives.
+        This could vary dynamically if C(file) contained a placeholder.
+    type: path
+    returned: always
+    sample: /tmp/splunk_apps/org_custom_tech-1.4.3.tgz
+archive_size:
+    description: Size of the generated C(archive) file in bytes.
+    type: int
+    returned: always
+    sample:
+stdout:
+    description: Output stream of details from the ksconf packaging operations.
+    type: str
+    returned: always
+    sample:
+
+new_hash:
+    description: >
+        Checksum of the previous (existing) tarball, if present.
+        This is a SHA256 of the uncompressed content.
+    type: str
+    returned: always
+    sample:
+
+old_hash:
+    description: Checksum of the new tarball.  See notes regarding I(new_hash) for more details.
+    type: str
+    returned: always
+    sample: e1617a87ea51c0ca930285c0ce60af4308513ea426ae04be42b1d7b47aba16a5
+
+context:
+    description: Optional pass-through field.  See the C(context) paramater.
+    type: dict
+    returned: when provided
+'''
+
+
+EXAMPLES_ = r'''
+
+- name: Build addon using a specific set of layers
+  cdi.splunk.ksconf_package:
   source: "{{app_repo}}/Splunk_TA_nix"
   file: "{{install_root}}/build/Splunk_TA_nix.spl"
   block: [*.sample]
@@ -170,16 +221,18 @@ def main():
                         elements="dict",
                         options=dict(include=dict(type="str", default=None),
                                      exclude=dict(type="str", default=None),
-                                     mutually_exclusive=[("include", "exclude")],
-                                     required_one_of=[("include", "exclude")]
                                      ),
+                        mutually_exclusive=[("include", "exclude")],
+                        required_one_of=[("include", "exclude")]
                         ),
             local=dict(type="str",
                        choices=["preserve", "block", "promote"],
                        default="preserve"
                        ),
-            follow_symlink=dict(type="bool", default=False, choices=BOOLEANS),
-            app_name=dict(default=None),
+
+            follow_symlink=dict(type="bool", default=False),
+            app_name=dict(type="str", default=None),
+            context=dict(type="dict", default=None),
         )
     )
     params = module.params
@@ -187,12 +240,16 @@ def main():
 
     source = params["source"]
     dest_file = params["file"]
-    block = params["block"]  # Convert a string to a list of 1
+    block = params["block"]
     layer_method = params["layer_method"]
     layers = params["layers"]
     local = params["local"]
     follow_symlink = module.boolean(params["follow_symlink"])
     app_name = params["app_name"]
+
+    # Copy 'context' through as-is
+    if params["context"]:
+        ret["context"] = params["context"]
 
     # Validate 'layers' paramater
     # It's possible that the 'options' configuration in Ansible's argument_spec will handle all this for us...?
@@ -296,11 +353,17 @@ def main():
         # Should we default 'dest' if no value is given???? -- this seems problematic (at least we need to be more specific, like include a hash of all found layers??)
         dest = dest_file or "{}-{{{{version}}}}.tgz".format(archive_base)
         archive_path = packager.make_archive(dest)
+        size = os.stat(archive_path).st_size
         log_stream.write("Archive created:  file={} size={:.2f}Kb\n".format(
-            os.path.basename(archive_path), os.stat(archive_path).st_size / 1024.0))
+            os.path.basename(archive_path), size / 1024.0))
 
         # Should this be expanded to be an absolute path?
         ret["archive"] = archive_path
+        ret["app_name"] = packager.app_name
+        ret["archive_size"] = size
+
+        # TODO: Return the layer names used.  Currently hidden behind AppPackager's internal call to "combine"
+        # ret["layers"] = list(...)
 
     end_time = datetime.datetime.now()
     delta = end_time - start_time
@@ -310,10 +373,8 @@ def main():
     ret["delta"] = to_text(delta)
     ret["stdout"] = to_text(log_stream.getvalue())
 
-    # Figure out how to make this idepotent.  First pass may be just comparing the checksum before & after
+    # Inefficient idepotent implementation; but it works with ksconf 0.9.1
     new_hash = gzip_content_hash(ret["archive"])
-
-    # Inefficient; but it works with ksconf 0.9.1, after a bunch of mtime preservations work
     ret["changed"] = new_hash != existing_hash
 
     ret["new_hash"] = new_hash

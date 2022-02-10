@@ -10,7 +10,7 @@ import os
 import ssl
 import sys
 
-from ansible.module_utils.basic import BOOLEANS, AnsibleModule
+from ansible.module_utils.basic import AnsibleModule
 
 
 __metaclass__ = type
@@ -364,8 +364,8 @@ def main():
             # Settings for module behavior
             state=dict(default='present',
                        choices=['present', 'absent', 'list']),
-            update_password=dict(type='bool', default='false', choices=BOOLEANS),
-            append_roles=dict(type='bool', default='false', choices=BOOLEANS),
+            update_password=dict(type='bool', default=False),
+            append_roles=dict(type='bool', default=False),
             # User settings
             splunk_user=dict(required=True),
             splunk_pass=dict(default=None, no_log=True),

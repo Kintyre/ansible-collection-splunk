@@ -2,6 +2,9 @@
 
 name: Build Ansible Collection
 
+env:
+  package: lowell80.splunk
+
 # Inspiration from:
 #   https://github.com/imjoseangel/ansiblecommon/blob/devel/.github/workflows/release.yml
 #   https://github.com/artis3n/ansible-collection-github/blob/master/.github/workflows/deploy.yml
@@ -69,10 +72,10 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: cdi-splunk-${{steps.cversion.outputs.version}}.tar.gz
-          asset_name: cdi-splunk-${{steps.cversion.outputs.version}}.tar.gz
+          asset_path: ${{env.package}}-${{steps.cversion.outputs.version}}.tar.gz
+          asset_name: ${{env.package}}-${{steps.cversion.outputs.version}}.tar.gz
           asset_content_type: application/tar+gzip
 
-      # - name: Deploy Ansible collection to Galaxy
-      #   run: ansible-galaxy collection publish cdi-splunk-${{ steps.cversion.outputs.version }}.tar.gz --api-key ${{ secrets.GALAXY_API_KEY }}
-      #   if: contains(github.ref, 'tags/v')
+      - name: Deploy Ansible collection to Galaxy
+        run: ansible-galaxy collection publish ${{env.package}}-${{ steps.cversion.outputs.version }}.tar.gz --api-key ${{ secrets.GALAXY_API_KEY }}
+        if: contains(github.ref, 'tags/v')

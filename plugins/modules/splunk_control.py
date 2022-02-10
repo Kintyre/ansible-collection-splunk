@@ -10,7 +10,7 @@ import ssl
 import sys
 import time
 
-from ansible.module_utils.basic import BOOLEANS, AnsibleModule
+from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.six.moves.urllib.parse import urlencode, urlparse
 from ansible.module_utils.six.moves.urllib.request import Request, urlopen
 
@@ -232,9 +232,9 @@ def main():
             state=dict(default='running',
                        choices=['running', 'restarted', 'offlined']),
             timeout=dict(type='int', default=300),
-            when_restart_required=dict(type='bool', default='false', choices=BOOLEANS),
+            when_restart_required=dict(type='bool', default=False),
             # Hidden params
-            no_sdk=dict(type='bool', default="false", choices=BOOLEANS)
+            no_sdk=dict(type='bool', default=False)
         )
     )
 
