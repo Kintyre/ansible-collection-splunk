@@ -79,7 +79,7 @@ class ActionModule(ActionBase):
             new_module_args['src'] = tmp_src
 
             # execute the actual module now, with the updated args
-            result.update(self._execute_module(module_name="lowell80.splunk.ksconf_app_install",
+            result.update(self._execute_module(module_name="lowell80.splunk.ksconf_app_sideload",
                                                module_args=new_module_args,
                                                task_vars=task_vars))
         except AnsibleAction as e:

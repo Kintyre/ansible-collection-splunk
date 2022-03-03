@@ -17,7 +17,7 @@ __metaclass__ = type
 
 DOCUMENTATION = r'''
 ---
-module: ksconf_app_install
+module: ksconf_app_sideload
 short_description: Unpacks a Splunk app archive after copying it from the local machine
 version_added: '0.10.0'
 author: Lowell C. Alleman (@lowell80)
@@ -437,7 +437,7 @@ APP_ATTRIBUTES = [
 ]
 
 
-def ksconf_install_app(src, dest, list_files=False):
+def ksconf_sideload_app(src, dest, list_files=False):
     from ksconf.archive import extract_archive, sanity_checker
     from ksconf.util.file import dir_exists
 
@@ -520,7 +520,7 @@ def main():
     if module.check_mode:
         module.exit_json(msg="Check mode unsupported....  Please finish the implementation!")
 
-    res_args = ksconf_install_app(src, dest, list_files)
+    res_args = ksconf_sideload_app(src, dest, list_files)
 
     # do we need to do unpack?
     # check_results = handler.is_unarchived()
