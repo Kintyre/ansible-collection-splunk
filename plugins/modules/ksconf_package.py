@@ -271,6 +271,10 @@ def main():
                                  "The key '{0}' must be one of {2}".format(
                                      key, value, ", ".join(VALID_LAYER_ACTIONS)))
 
+    if not os.path.isdir(source):
+        module.fail_json(msg="The source '{}' is not a directory or is not "
+                         "accessible.".format(source))
+
     # if (splunk_user or splunk_pass) and not (splunk_user and splunk_pass):
     #    module.fail_json(msg="Both 'username' and 'password' must be specified at the same time.")
 
