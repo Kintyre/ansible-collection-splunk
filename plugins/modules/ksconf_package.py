@@ -8,7 +8,8 @@ import os
 
 from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import AnsibleModule
-from ksconf.package import AppPackager
+from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import \
+    check_ksconf_version
 
 
 __metaclass__ = type
@@ -251,6 +252,15 @@ def main():
     if params["context"]:
         ret["context"] = params["context"]
 
+    ksconf_version = check_ksconf_version(module)
+    if ksconf_version < (0, 8, 4):
+        module.fail_json(msg="ksconf version>=0.8.4 is required.  Found {}".format(ksconf_version))
+    if ksconf_version < (0, 9, 1):
+        module.warn("ksconf version>=0.9.1 is required to support idempotent behavior.")
+
+    # Import the ksconf bits we need
+    from ksconf.package import AppPackager
+
     # Validate 'layers' paramater
     # It's possible that the 'options' configuration in Ansible's argument_spec will handle all this for us...?
     if layers is None:
@@ -320,6 +330,7 @@ def main():
         app_name_source = "taken from source directory"
 
     log_stream.write("Packaging {}   (App name {})\n".format(app_name, app_name_source))
+
     packager = AppPackager(source, app_name, output=log_stream)
 
     with packager:

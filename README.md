@@ -1,5 +1,6 @@
 # Ansible Collection - cdi.splunk
 
+**Namespace Note**:  We are currently using `lowell80` as the namespace.  Any references to `cdi` are a possible future namespace, so some translations may be needed until this is finalized.
 
 Modules for the collection.
 

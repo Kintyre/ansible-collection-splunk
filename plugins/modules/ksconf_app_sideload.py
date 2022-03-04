@@ -10,6 +10,11 @@ from ansible.module_utils._text import to_bytes, to_native, to_text
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.locale import get_best_parsable_locale
 from ansible.module_utils.common.process import get_bin_path
+# Module version
+# from ansible.module_utils.ksconf_shared import check_ksconf_version
+# Collection version
+from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import \
+    check_ksconf_version
 
 
 __metaclass__ = type
@@ -490,6 +495,11 @@ def main():
         # check-mode only works for zip files, we cover that later
         # supports_check_mode=True
     )
+
+    ksconf_version = check_ksconf_version(module)
+    if ksconf_version < (0, 9):
+        module.warn("ksconf version {} is older than v0.9.  This may result in "
+                    "unexpected behavior.  Please upgrade ksconf.".format(ksconf_version))
 
     src = module.params['src']
     dest = module.params['dest']

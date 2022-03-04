@@ -8,6 +8,7 @@ import os
 import re
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import find_splunk_home
 
 
 __metaclass__ = type
@@ -62,11 +63,7 @@ Notes about output layout:
 
 '''
 
-SPLUNK_HOME_PATH = [
-    "/opt/splunk",
-    "/Applications/Splunk",
-    "/opt/splunkforwarder"
-]
+
 SPLUNK_VERSION = "etc/splunk.version"
 SPLUNK_INSTANCE_CFG = "etc/instance.cfg"
 SPLUNK_AUTH_SECRET = "etc/auth/splunk.secret"
@@ -77,7 +74,7 @@ class SplunkMetadata(object):
     def __init__(self, module, splunk_home=None):
         self.module = module
         if not splunk_home:
-            splunk_home = self.find_splunk_home()
+            splunk_home = find_splunk_home()
             if not splunk_home:
                 self.fail("Couldn't locate SPLUNK_HOME.")
                 return
@@ -97,14 +94,6 @@ class SplunkMetadata(object):
     def fail(self, msg):
         self._error = msg
         self._fail = True
-
-    def find_splunk_home(self):
-        if "SPLUNK_HOME" in os.environ:
-            return os.environ["SPLUNK_HOME"]
-        for path in SPLUNK_HOME_PATH:
-            if os.path.isdir(path):
-                return path
-        return None
 
     def fetch_version(self):
         splunk_version = os.path.join(self.splunk_home, SPLUNK_VERSION)
