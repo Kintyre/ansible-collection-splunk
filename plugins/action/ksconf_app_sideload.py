@@ -1,19 +1,42 @@
 from __future__ import absolute_import, division, print_function
+import json
 
 
 __metaclass__ = type
 
 import os
 
+from tempfile import NamedTemporaryFile
 from ansible.errors import AnsibleAction, AnsibleActionFail, AnsibleActionSkip, AnsibleError
 from ansible.module_utils._text import to_text
 from ansible.module_utils.parsing.convert_bool import boolean
 from ansible.plugins.action import ActionBase
+from ansible.utils.display import Display
 
+
+display = Display()
+
+from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import \
+    get_app_info_from_spl, SIDELOAD_STATE_FILE
 
 class ActionModule(ActionBase):
 
     TRANSFERS_FILES = True
+
+    def parse_remote_json_file(self, path):
+        try:
+            display.vvv(u"JSON state  file={0}".format(path))
+            with NamedTemporaryFile("rb+") as temp_f:
+                self._connection.fetch_file(path, temp_f.name)
+                temp_f.seek(0)
+                data = json.load(temp_f)
+                display.vvv(u"JSON state  file={0} data={1!r}".format(path, data))
+                return data
+
+        # TODO: Capture file not found exception and return `None`
+        except Exception as e:
+            display.vvv(u"JSON state  file={0} Exception={1}".format(path, to_text(e)))
+            raise e
 
     def run(self, tmp=None, task_vars=None):
         ''' handler for app side-load operation '''
@@ -22,6 +45,8 @@ class ActionModule(ActionBase):
 
         result = super(ActionModule, self).run(tmp, task_vars)
         del tmp
+
+        # TODO: Check ksconf version on the control node (can't use check_ksconf_version() which needs a module)
 
         # Uses 'unarchive' like args
         source = self._task.args.get('src', None)
@@ -51,37 +76,53 @@ class ActionModule(ActionBase):
             except AnsibleError as e:
                 raise AnsibleActionFail(to_text(e))
 
-            # This is way to limited....
-            # TODO:  Replace this with some kind of remote state file fetch
             try:
-                remote_stat = self._execute_remote_stat(dest, all_vars=task_vars, follow=True)
-            except AnsibleError as e:
+                app_names, _, extras = get_app_info_from_spl(source, calc_hash=True)
+                if len(app_names) != 1:
+                    raise AnsibleActionFail("Tarball must contain exactly one app.  Found {}".format(app_names))
+                app_name = app_names.pop()
+                state_file = os.path.join(dest, app_name, SIDELOAD_STATE_FILE)
+                hash = extras["hash"]
+
+                try:
+                    state = self.parse_remote_json_file(state_file)
+                    remote_hash = state["src_hash"]
+
+                    changed = hash != remote_hash
+                except AnsibleError as e:
+                    raise AnsibleActionFail(to_text(e))
+
+            except Exception as e:
+                changed = True
+                # Re rase for now .... track down better exception class!
                 raise AnsibleActionFail(to_text(e))
 
-            if not remote_stat['exists'] or not remote_stat['isdir']:
-                raise AnsibleActionFail("dest '%s' must be an existing dir" % dest)
+            if changed:
 
-            # transfer the file to a remote tmp location
-            tmp_src = self._connection._shell.join_path(self._connection._shell.tmpdir, 'source')
-            self._transfer_file(source, tmp_src)
+                # transfer the file to a remote tmp location
+                tmp_src = self._connection._shell.join_path(self._connection._shell.tmpdir, 'source')
+                self._transfer_file(source, tmp_src)
 
-            # handle diff mode client side
-            # handle check mode client side
+                # handle diff mode client side
+                # handle check mode client side
 
-            # remove action plugin only keys
-            new_module_args = self._task.args.copy()
-            for key in ('decrypt',):
-                if key in new_module_args:
-                    del new_module_args[key]
+                # remove action plugin only keys
+                new_module_args = self._task.args.copy()
+                for key in ('decrypt',):
+                    if key in new_module_args:
+                        del new_module_args[key]
 
-            # fix file permissions when the copy is done as a different user
-            self._fixup_perms2((self._connection._shell.tmpdir, tmp_src))
-            new_module_args['src'] = tmp_src
+                # fix file permissions when the copy is done as a different user
+                self._fixup_perms2((self._connection._shell.tmpdir, tmp_src))
+                new_module_args['src'] = tmp_src
 
-            # execute the actual module now, with the updated args
-            result.update(self._execute_module(module_name="lowell80.splunk.ksconf_app_sideload",
-                                               module_args=new_module_args,
-                                               task_vars=task_vars))
+                # execute the actual module now, with the updated args
+                result.update(self._execute_module(module_name="lowell80.splunk.ksconf_app_sideload",
+                                                   module_args=new_module_args,
+                                                   task_vars=task_vars))
+            else:
+                result["changed"] = False
+
         except AnsibleAction as e:
             result.update(e.result)
         finally:

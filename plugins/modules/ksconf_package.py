@@ -9,7 +9,7 @@ import os
 from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import \
-    check_ksconf_version
+    check_ksconf_version, gzip_content_hash
 
 
 __metaclass__ = type
@@ -185,28 +185,7 @@ EXAMPLES_ = r'''
 VALID_LAYER_ACTIONS = ["include", "exclude"]
 
 
-def gzip_content_hash(filename, blocksize=64 * 1024):
-    """ Get the hash of the contents of a compressed (gz) file.  Otherwise,
-    using AnsibleModule.digest_from_file() would be better option.
 
-    Unfortunately, in our use case, the gzip header of the tgz file contains a
-    reference to the creation time of the archive, hence the exact same input
-    will show as a modification.  Eventually, input change detection support
-    should supersede all this wonkyness.
-    """
-    from gzip import GzipFile
-    from hashlib import sha256
-    filename = os.path.realpath(filename)
-    if not os.path.isfile(filename):
-        return None
-
-    digest = sha256()
-    with GzipFile(filename, "rb") as stream:
-        block = stream.read(blocksize)
-        while block:
-            digest.update(block)
-            block = stream.read(blocksize)
-        return digest.hexdigest()
 
 
 def main():

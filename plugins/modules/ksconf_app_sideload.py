@@ -14,7 +14,7 @@ from ansible.module_utils.common.process import get_bin_path
 # from ansible.module_utils.ksconf_shared import check_ksconf_version
 # Collection version
 from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import \
-    check_ksconf_version
+    check_ksconf_version, get_app_info_from_spl, SIDELOAD_STATE_FILE
 
 
 __metaclass__ = type
@@ -384,56 +384,6 @@ class KsconfArchive(object):
             return False, "Unable to import ksconf python package"
 
 
-# try handlers in order and return the one that works or bail if none work
-def pick_handler(src, dest, file_args, module):
-    handlers = [KsconfArchive, TgzArchive]
-    reasons = set()
-    for handler in handlers:
-        obj = handler(src, dest, file_args, module)
-        (can_handle, reason) = obj.can_handle_archive()
-        if can_handle:
-            return obj
-        reasons.add(reason)
-    reason_msg = '\n'.join(reasons)
-    module.fail_json(
-        msg='Failed to find handler for "%s". Make sure the required command to extract the file is installed.\n%s' % (src, reason_msg))
-
-
-def get_app_info_from_spl(tarball):
-    ''' Returns list of app names, merged app_conf and a dictionary of extra facts that may be useful '''
-    # XXX: Move this into ksconf.archive and share it with ksconf.commands.unarchive
-    from io import StringIO
-
-    from ksconf.archive import extract_archive, gaf_filter_name_like, sanity_checker
-    from ksconf.conf.parser import (PARSECONF_LOOSE, ConfParserException,
-                                    default_encoding, parse_conf)
-
-    app_names = set()
-    app_conf = {}
-    files = 0
-    local_files = set()
-    a = extract_archive(tarball, extract_filter=gaf_filter_name_like("app.conf"))
-    for gaf in sanity_checker(a):
-        gaf_app, gaf_relpath = gaf.path.split("/", 1)
-        files += 1
-        # TODO: Can we ensure that local vs default is extracted in the correct order?  Actually, we don't even look at the path at all!  This needs some cleanup!
-        if gaf.path.endswith("app.conf") and gaf.payload:
-            conffile = StringIO(gaf.payload.decode(default_encoding))
-            conffile.name = os.path.join(tarball, gaf.path)
-            app_conf = parse_conf(conffile, profile=PARSECONF_LOOSE)
-            del conffile
-        elif gaf_relpath.startswith("local" + os.path.sep) or \
-                gaf_relpath.endswith("local.meta"):
-            local_files.add(gaf_relpath)
-        app_names.add(gaf_app)
-        del gaf_app, gaf_relpath
-    extras = {
-        "local_files": local_files,
-        "file_count": files,
-    }
-    return app_names, app_conf, extras
-
-
 # Informative stanza, attributes combos from app.conf
 APP_ATTRIBUTES = [
     ("ui", "label"),
@@ -446,7 +396,7 @@ def ksconf_sideload_app(src, dest, list_files=False):
     from ksconf.archive import extract_archive, sanity_checker
     from ksconf.util.file import dir_exists
 
-    app_names, app_conf, extras = get_app_info_from_spl(src)
+    app_names, app_conf, extras = get_app_info_from_spl(src, calc_hash=True)
     if len(app_names) > 1:
         raise UnarchiveError("This module only supports extracting a single splunk app.  "
                              "Found {} apps named:  {}".format(len(app_names),
@@ -458,13 +408,16 @@ def ksconf_sideload_app(src, dest, list_files=False):
         "app_info": {
             "name": app_name},
     }
+    hash_sig = result["hash"] = extras.pop("hash")
+    # Preserve this?
+    if extras:
+        result["app_info"]["extras"] = extras
     for stanza, attribute in APP_ATTRIBUTES:
         value = app_conf.get(stanza, {}).get(attribute)
         result["app_info"][attribute] = value
 
     files = extract_archive(src)
     files = sanity_checker(files)    # Check for bad paths (absolute, or relative with "..")
-
     if list_files:
         result["files"] = file_list = []
     # gen_arch_file_remapper -- Optionally add this one if we need to remap output destination
@@ -478,6 +431,15 @@ def ksconf_sideload_app(src, dest, list_files=False):
         # TODO:  Preserve modification time?   Currently not part of the GenArchFile data structure
         if list_files:
             file_list.append(f.path)
+
+    with open(os.path.join(dest, app_name, SIDELOAD_STATE_FILE), "w") as marker_f:
+        data = {
+            "src_path": src,
+            "src_hash": hash_sig,
+            # Todo: Add install timestamp
+        }
+        import json
+        json.dump(data, marker_f)
 
     # Hard code this for now!
     result["changed"] = True
