@@ -5,6 +5,7 @@ from __future__ import absolute_import, division, print_function
 import codecs
 import fnmatch
 import os
+import time
 
 from ansible.module_utils._text import to_bytes, to_native, to_text
 from ansible.module_utils.basic import AnsibleModule
@@ -13,8 +14,9 @@ from ansible.module_utils.common.process import get_bin_path
 # Module version
 # from ansible.module_utils.ksconf_shared import check_ksconf_version
 # Collection version
-from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import \
-    check_ksconf_version
+from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import (
+    SIDELOAD_STATE_FILE, __version__ as collection_version,
+    check_ksconf_version, get_app_info_from_spl)
 
 
 __metaclass__ = type
@@ -29,6 +31,9 @@ author: Lowell C. Alleman (@lowell80)
 description:
      - By default, it will copy the source file from the local system to the target before unpacking.
      - For Windows targets, switch to Linux.
+requirements:
+  - kintyre-splunk-conf>=0.9
+
 options:
   src:
     description:
@@ -95,12 +100,13 @@ attributes:
     vault:
       support: full
 notes:
-#    - Requires ksconf package on target host.
+    - Requires ksconf package on controller and target host.
     - Can handle I(.tgz), I(.tar.gz), I(.spl), and I(.zip) files.
-    - Note that B(only) files are extracted.  This means empty directories will not be created.  Open a bug report if this cause an issue for you and describe the use case.
+    - Note that only B(files) are extracted.
+      This means empty directories will not be created.
+      If this cause an issue for you, open a bug report and describe your use case.
 #    - Existing files/directories in the destination which are not in the archive
 #      are not touched. This is the same behavior as a normal archive extraction.
-
 '''
 
 
@@ -384,56 +390,6 @@ class KsconfArchive(object):
             return False, "Unable to import ksconf python package"
 
 
-# try handlers in order and return the one that works or bail if none work
-def pick_handler(src, dest, file_args, module):
-    handlers = [KsconfArchive, TgzArchive]
-    reasons = set()
-    for handler in handlers:
-        obj = handler(src, dest, file_args, module)
-        (can_handle, reason) = obj.can_handle_archive()
-        if can_handle:
-            return obj
-        reasons.add(reason)
-    reason_msg = '\n'.join(reasons)
-    module.fail_json(
-        msg='Failed to find handler for "%s". Make sure the required command to extract the file is installed.\n%s' % (src, reason_msg))
-
-
-def get_app_info_from_spl(tarball):
-    ''' Returns list of app names, merged app_conf and a dictionary of extra facts that may be useful '''
-    # XXX: Move this into ksconf.archive and share it with ksconf.commands.unarchive
-    from io import StringIO
-
-    from ksconf.archive import extract_archive, gaf_filter_name_like, sanity_checker
-    from ksconf.conf.parser import (PARSECONF_LOOSE, ConfParserException,
-                                    default_encoding, parse_conf)
-
-    app_names = set()
-    app_conf = {}
-    files = 0
-    local_files = set()
-    a = extract_archive(tarball, extract_filter=gaf_filter_name_like("app.conf"))
-    for gaf in sanity_checker(a):
-        gaf_app, gaf_relpath = gaf.path.split("/", 1)
-        files += 1
-        # TODO: Can we ensure that local vs default is extracted in the correct order?  Actually, we don't even look at the path at all!  This needs some cleanup!
-        if gaf.path.endswith("app.conf") and gaf.payload:
-            conffile = StringIO(gaf.payload.decode(default_encoding))
-            conffile.name = os.path.join(tarball, gaf.path)
-            app_conf = parse_conf(conffile, profile=PARSECONF_LOOSE)
-            del conffile
-        elif gaf_relpath.startswith("local" + os.path.sep) or \
-                gaf_relpath.endswith("local.meta"):
-            local_files.add(gaf_relpath)
-        app_names.add(gaf_app)
-        del gaf_app, gaf_relpath
-    extras = {
-        "local_files": local_files,
-        "file_count": files,
-    }
-    return app_names, app_conf, extras
-
-
 # Informative stanza, attributes combos from app.conf
 APP_ATTRIBUTES = [
     ("ui", "label"),
@@ -442,11 +398,11 @@ APP_ATTRIBUTES = [
 ]
 
 
-def ksconf_sideload_app(src, dest, list_files=False):
+def ksconf_sideload_app(src, dest, list_files=False, src_orig=None):
     from ksconf.archive import extract_archive, sanity_checker
     from ksconf.util.file import dir_exists
 
-    app_names, app_conf, extras = get_app_info_from_spl(src)
+    app_names, app_conf, extras = get_app_info_from_spl(src, calc_hash=True)
     if len(app_names) > 1:
         raise UnarchiveError("This module only supports extracting a single splunk app.  "
                              "Found {} apps named:  {}".format(len(app_names),
@@ -458,13 +414,16 @@ def ksconf_sideload_app(src, dest, list_files=False):
         "app_info": {
             "name": app_name},
     }
+    hash_sig = result["hash"] = extras.pop("hash")
+    # Preserve this?
+    if extras:
+        result["app_info"]["extras"] = extras
     for stanza, attribute in APP_ATTRIBUTES:
         value = app_conf.get(stanza, {}).get(attribute)
         result["app_info"][attribute] = value
 
     files = extract_archive(src)
     files = sanity_checker(files)    # Check for bad paths (absolute, or relative with "..")
-
     if list_files:
         result["files"] = file_list = []
     # gen_arch_file_remapper -- Optionally add this one if we need to remap output destination
@@ -479,6 +438,16 @@ def ksconf_sideload_app(src, dest, list_files=False):
         if list_files:
             file_list.append(f.path)
 
+    with open(os.path.join(dest, app_name, SIDELOAD_STATE_FILE), "w") as marker_f:
+        data = {
+            "src_path": src_orig or src,
+            "src_hash": hash_sig,
+            "ansible_module_version": collection_version,
+            "installed_at": time.time(),
+        }
+        import json
+        json.dump(data, marker_f)
+
     # Hard code this for now!
     result["changed"] = True
     return result
@@ -488,11 +457,11 @@ def main():
     module = AnsibleModule(
         argument_spec=dict(
             src=dict(type='path', required=True),
+            src_orig=dict(type="path", required=False),  # Internal (added by action)
             dest=dict(type='path', required=True),
             list_files=dict(type='bool', default=False)
         ),
         add_file_common_args=True,
-        # check-mode only works for zip files, we cover that later
         # supports_check_mode=True
     )
 
@@ -502,6 +471,7 @@ def main():
                     "unexpected behavior.  Please upgrade ksconf.".format(ksconf_version))
 
     src = module.params['src']
+    src_orig = module.params["src_orig"]
     dest = module.params['dest']
     list_files = module.params["list_files"]
     b_dest = to_bytes(dest, errors='surrogate_or_strict')
@@ -524,16 +494,10 @@ def main():
     if not os.path.isdir(b_dest):
         module.fail_json(msg="Destination '%s' is not a directory" % dest)
 
-    #  DO ACTUAL WORK HERE!
-    # handler = pick_handler(src, b_dest, file_args, module)
-
     if module.check_mode:
         module.exit_json(msg="Check mode unsupported....  Please finish the implementation!")
 
-    res_args = ksconf_sideload_app(src, dest, list_files)
-
-    # do we need to do unpack?
-    # check_results = handler.is_unarchived()
+    res_args = ksconf_sideload_app(src, dest, list_files, src_orig=src_orig)
 
     # DEBUG
     # res_args['check_results'] = check_results
