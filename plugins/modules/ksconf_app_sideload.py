@@ -4,6 +4,7 @@ from __future__ import absolute_import, division, print_function
 
 import codecs
 import fnmatch
+import json
 import os
 import time
 
@@ -398,7 +399,7 @@ APP_ATTRIBUTES = [
 ]
 
 
-def ksconf_sideload_app(src, dest, list_files=False, src_orig=None):
+def ksconf_sideload_app(src, dest, src_orig=None):
     from ksconf.archive import extract_archive, sanity_checker
     from ksconf.util.file import dir_exists
 
@@ -424,8 +425,7 @@ def ksconf_sideload_app(src, dest, list_files=False, src_orig=None):
 
     files = extract_archive(src)
     files = sanity_checker(files)    # Check for bad paths (absolute, or relative with "..")
-    if list_files:
-        result["files"] = file_list = []
+    file_list = []
     # gen_arch_file_remapper -- Optionally add this one if we need to remap output destination
     for f in files:
         full_path = os.path.join(dest, f.path)
@@ -433,24 +433,23 @@ def ksconf_sideload_app(src, dest, list_files=False, src_orig=None):
         with open(full_path, "wb") as fp:
             fp.write(f.payload)
         os.chmod(full_path, f.mode)
-        # TODO:  Set owner, SE linux attributes, .... inherited from `file` module.
-        # TODO:  Preserve modification time?   Currently not part of the GenArchFile data structure
-        if list_files:
-            file_list.append(f.path)
+        file_list.append(f.path)
 
-    with open(os.path.join(dest, app_name, SIDELOAD_STATE_FILE), "w") as marker_f:
+    state_file = os.path.join(dest, app_name, SIDELOAD_STATE_FILE)
+    with open(state_file, "w") as marker_f:
         data = {
             "src_path": src_orig or src,
             "src_hash": hash_sig,
             "ansible_module_version": collection_version,
             "installed_at": time.time(),
         }
-        import json
+
         json.dump(data, marker_f)
+    file_list.append(state_file)
 
     # Hard code this for now!
     result["changed"] = True
-    return result
+    return result, file_list
 
 
 def main():
@@ -497,7 +496,21 @@ def main():
     if module.check_mode:
         module.exit_json(msg="Check mode unsupported....  Please finish the implementation!")
 
-    res_args = ksconf_sideload_app(src, dest, list_files, src_orig=src_orig)
+    res_args, files = ksconf_sideload_app(src, dest, src_orig=src_orig)
+
+    # Reset permissions on all files (mode,owner,group,attr,se*)
+    for filename in files:
+        file_args['path'] = os.path.join(b_dest, to_bytes(filename, errors='surrogate_or_strict'))
+        try:
+            res_args['changed'] = module.set_fs_attributes_if_different(
+                file_args, res_args['changed'], expand=False)
+        except (IOError, OSError) as e:
+            module.fail_json(msg="Unexpected error when accessing file: %s" %
+                             to_native(e), **res_args)
+
+    if list_files:
+        # Copy to results; skip very last file (which is always the state file)
+        res_args["files"] = files[:-1]
 
     # DEBUG
     # res_args['check_results'] = check_results
