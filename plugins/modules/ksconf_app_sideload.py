@@ -498,15 +498,19 @@ def main():
 
     res_args, files = ksconf_sideload_app(src, dest, src_orig=src_orig)
 
-    # Reset permissions on all files (mode,owner,group,attr,se*)
-    for filename in files:
-        file_args['path'] = os.path.join(b_dest, to_bytes(filename, errors='surrogate_or_strict'))
-        try:
-            res_args['changed'] = module.set_fs_attributes_if_different(
-                file_args, res_args['changed'], expand=False)
-        except (IOError, OSError) as e:
-            module.fail_json(msg="Unexpected error when accessing file: %s" %
-                             to_native(e), **res_args)
+    if res_args.get('diff', True) and not module.check_mode:
+        # do we need to change perms?
+        # Reset permissions on all files (mode,owner,group,attr,se*)
+        # TODO:  Support applying permissions to directories TOO (currently they are not handled)
+        for filename in files:
+            file_args['path'] = os.path.join(b_dest, to_bytes(
+                filename, errors='surrogate_or_strict'))
+            try:
+                res_args['changed'] = module.set_fs_attributes_if_different(
+                    file_args, res_args['changed'], expand=False)
+            except (IOError, OSError) as e:
+                module.fail_json(msg="Unexpected error when accessing file: %s"
+                                 % to_native(e), **res_args)
 
     if list_files:
         # Copy to results; skip very last file (which is always the state file)
@@ -534,20 +538,6 @@ def main():
     if check_results.get('diff', False):
         res_args['diff'] = {'prepared': check_results['diff']}
 
-
-    # Run only if we found differences (idempotence) or diff was missing
-    if res_args.get('diff', True) and not module.check_mode:
-        # do we need to change perms?
-        for filename in handler.files_in_archive:
-            file_args['path'] = os.path.join(b_dest, to_bytes(filename, errors='surrogate_or_strict'))
-
-            try:
-                res_args['changed'] = module.set_fs_attributes_if_different(file_args, res_args['changed'], expand=False)
-            except (IOError, OSError) as e:
-                module.fail_json(msg="Unexpected error when accessing exploded file: %s" % to_native(e), **res_args)
-
-    if module.params['list_files']:
-        res_args['files'] = handler.files_in_archive
     '''
 
     module.exit_json(**res_args)
