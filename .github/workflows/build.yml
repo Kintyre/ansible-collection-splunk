@@ -4,7 +4,7 @@ name: Build Ansible Collection
 
 env:
   # Note the use of "-" in the package name (not ".")
-  package: lowell80-splunk
+  package: cdillc-splunk
 
 # Inspiration from:
 #   https://github.com/imjoseangel/ansiblecommon/blob/devel/.github/workflows/release.yml

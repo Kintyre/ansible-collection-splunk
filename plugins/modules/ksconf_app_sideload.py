@@ -12,7 +12,7 @@ from ansible.module_utils._text import to_bytes, to_native, to_text
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.locale import get_best_parsable_locale
 from ansible.module_utils.common.process import get_bin_path
-from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import (
+from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
     SIDELOAD_STATE_FILE, __version__ as collection_version,
     check_ksconf_version, get_app_info_from_spl)
 

@@ -2,7 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import json
 
-from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import (
+from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
     SIDELOAD_STATE_FILE, get_app_info_from_spl)
 
 
@@ -128,7 +128,7 @@ class ActionModule(ActionBase):
                 new_module_args['src_orig'] = src
 
                 # execute the actual module now, with the updated args
-                result.update(self._execute_module(module_name="lowell80.splunk.ksconf_app_sideload",
+                result.update(self._execute_module(module_name="cdillc.splunk.ksconf_app_sideload",
                                                    module_args=new_module_args,
                                                    task_vars=task_vars))
             else:

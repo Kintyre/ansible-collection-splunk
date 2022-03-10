@@ -8,7 +8,7 @@ import os
 import re
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import find_splunk_home
+from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import find_splunk_home
 
 
 __metaclass__ = type

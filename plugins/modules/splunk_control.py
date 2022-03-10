@@ -92,7 +92,7 @@ options:
 EXAMPLES = '''
 Restart the Splunkd service and wait for it to come back online:
 
-- cdi.splunk.splunk_control: state=restarted username=admin password=manage
+- cdillc.splunk.splunk_control: state=restarted username=admin password=manage
 '''
 
 

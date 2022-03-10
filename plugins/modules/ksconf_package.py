@@ -8,8 +8,8 @@ import os
 
 from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import \
-    check_ksconf_version, gzip_content_hash
+from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
+    check_ksconf_version, gzip_content_hash)
 
 
 __metaclass__ = type
@@ -170,7 +170,7 @@ context:
 EXAMPLES_ = r'''
 
 - name: Build addon using a specific set of layers
-  cdi.splunk.ksconf_package:
+  cdillc.splunk.ksconf_package:
   source: "{{app_repo}}/Splunk_TA_nix"
   file: "{{install_root}}/build/Splunk_TA_nix.spl"
   block: [*.sample]
@@ -183,9 +183,6 @@ EXAMPLES_ = r'''
     - include: 40-{{env}}
 '''
 VALID_LAYER_ACTIONS = ["include", "exclude"]
-
-
-
 
 
 def main():

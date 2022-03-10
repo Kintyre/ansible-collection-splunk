@@ -1,6 +1,5 @@
-# Ansible Collection - cdi.splunk
+# Ansible Collection - cdillc.splunk
 
-**Namespace Note**:  We are currently using `lowell80` as the namespace.  Any references to `cdi` are a possible future namespace, so some translations may be needed until this is finalized.
 
 Modules for the collection.
 
@@ -31,10 +30,10 @@ ansible-galaxy collection install . --force
 
 
 export SPLUNK_HOME=~/splunk
-ansible -i inventory -m cdi.splunk.splunk_cli -a "splunk_home={{splunk_home}} cmd=version" all
-ansible -i inventory -m cdi.splunk.splunk_control -a "state=restarted username=admin password=PASSWORD timeout=20" all
+ansible -i inventory -m cdillc.splunk.splunk_cli -a "splunk_home={{splunk_home}} cmd=version" all
+ansible -i inventory -m cdillc.splunk.splunk_control -a "state=restarted username=admin password=PASSWORD timeout=20" all
 
-ansible -m cdi.splunk.ksconf_package -a "source=/data/repos/my_apps/kintyre-spl file=/tmp/kintyre-splunk-app.spl local=preserve" localhost
-ansible -m cdi.splunk.ksconf_app_sideload -a "src=/tmp/kintyre-splunk-app.spl dest=$SPLUNK_HOME/etc/apps list_files=true" localhost
+ansible -m cdillc.splunk.ksconf_package -a "source=/data/repos/my_apps/kintyre-spl file=/tmp/kintyre-splunk-app.spl local=preserve" localhost
+ansible -m cdillc.splunk.ksconf_app_sideload -a "src=/tmp/kintyre-splunk-app.spl dest=$SPLUNK_HOME/etc/apps list_files=true" localhost
 
 ```
