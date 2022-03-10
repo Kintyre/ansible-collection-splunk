@@ -1,7 +1,13 @@
-venv
+# Built collections
 *.tar.gz
-
 
 # Ansible lint
 .cache
+
+# Developer stuff
 .vscode
+
+# Python stuff
+venv
+__pycache__
+*.py[co]

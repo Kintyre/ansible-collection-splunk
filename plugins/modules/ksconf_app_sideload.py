@@ -12,12 +12,14 @@ from ansible.module_utils._text import to_bytes, to_native, to_text
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.locale import get_best_parsable_locale
 from ansible.module_utils.common.process import get_bin_path
-# Module version
-# from ansible.module_utils.ksconf_shared import check_ksconf_version
-# Collection version
 from ansible_collections.lowell80.splunk.plugins.module_utils.ksconf_shared import (
     SIDELOAD_STATE_FILE, __version__ as collection_version,
     check_ksconf_version, get_app_info_from_spl)
+
+
+# Module version
+# from ansible.module_utils.ksconf_shared import check_ksconf_version
+# Collection version
 
 
 __metaclass__ = type
@@ -192,6 +194,11 @@ state:
   returned: always
   type: str
   sample: "directory"
+state_file:
+  description: Relative path to the json state tracking file where installation state and source hash information is stored.
+  returned: always
+  type: str
+  sample: fire_brigade/.ksconf_sideload.json
 uid:
   description: Numerical ID of the user that owns the destination directory.
   returned: always
@@ -391,6 +398,30 @@ class KsconfArchive(object):
             return False, "Unable to import ksconf python package"
 
 
+def calc_missing_parent_dirs(paths):
+    """
+    Given a sequence of paths, return a list of unique parent directories and
+    files in tree creation order.
+    """
+    known_dirs = set()
+    files_and_dirs = []
+
+    for path in paths:
+        parent = os.path.dirname(path)
+        new_parents = []
+        while parent not in ("", "/"):
+            if parent in known_dirs:
+                break
+            else:
+                new_parents.insert(0, parent)
+                parent = os.path.dirname(parent)
+        if new_parents:
+            known_dirs.update(new_parents)
+            files_and_dirs.extend(new_parents)
+        files_and_dirs.append(path)
+    return files_and_dirs
+
+
 # Informative stanza, attributes combos from app.conf
 APP_ATTRIBUTES = [
     ("ui", "label"),
@@ -435,15 +466,14 @@ def ksconf_sideload_app(src, dest, src_orig=None):
         os.chmod(full_path, f.mode)
         file_list.append(f.path)
 
-    state_file = os.path.join(dest, app_name, SIDELOAD_STATE_FILE)
-    with open(state_file, "w") as marker_f:
+    state_file = os.path.join(app_name, SIDELOAD_STATE_FILE)
+    with open(os.path.join(dest, state_file), "w") as marker_f:
         data = {
             "src_path": src_orig or src,
             "src_hash": hash_sig,
             "ansible_module_version": collection_version,
             "installed_at": time.time(),
         }
-
         json.dump(data, marker_f)
     file_list.append(state_file)
 
@@ -498,10 +528,12 @@ def main():
 
     res_args, files = ksconf_sideload_app(src, dest, src_orig=src_orig)
 
+    # Hack: Inject parent directories into the list too (since directories are technically skipped)
+    files = calc_missing_parent_dirs(files)
+
     if res_args.get('diff', True) and not module.check_mode:
         # do we need to change perms?
         # Reset permissions on all files (mode,owner,group,attr,se*)
-        # TODO:  Support applying permissions to directories TOO (currently they are not handled)
         for filename in files:
             file_args['path'] = os.path.join(b_dest, to_bytes(
                 filename, errors='surrogate_or_strict'))
@@ -516,6 +548,7 @@ def main():
         # Copy to results; skip very last file (which is always the state file)
         res_args["files"] = files[:-1]
 
+    res_args["state_file"] = files[-1]
     # DEBUG
     # res_args['check_results'] = check_results
 
