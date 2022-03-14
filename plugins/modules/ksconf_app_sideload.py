@@ -17,9 +17,11 @@ from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import
     check_ksconf_version, get_app_info_from_spl)
 
 
-# Module version
-# from ansible.module_utils.ksconf_shared import check_ksconf_version
-# Collection version
+# Import module_utils notes....   These have to be top-level imports due to how ansiballz ships
+# required modules to the target node (no try/except fallbacks allowed here)
+#
+# Module version:       ansible.module_utils.ksconf_shared
+# Collection version:   ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared
 
 
 __metaclass__ = type
@@ -185,7 +187,7 @@ size:
 src:
   description:
     - The source archive's path.
-    - If I(src) was a remote web URL, or from the local ansible controller, this shows the temporary location where the download was stored.
+    - If I(src) was a remote web URL, or location local to the ansible controller.
   returned: always
   type: str
   sample: "/home/paul/test.tar.gz"
@@ -551,6 +553,10 @@ def main():
     res_args["state_file"] = files[-1]
     # DEBUG
     # res_args['check_results'] = check_results
+
+    # Cleanup paramater to better match user's intention (Impacts the invocation/module_args output)
+    module.params["src"] = src_orig
+    del module.params["src_orig"]
 
     '''
     if module.check_mode:
