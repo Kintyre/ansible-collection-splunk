@@ -237,26 +237,6 @@ def main():
     # Import the ksconf bits we need
     from ksconf.package import AppPackager
 
-    # Validate 'layers' paramater
-    # It's possible that the 'options' configuration in Ansible's argument_spec will handle all this for us...?
-    if layers is None:
-        # No explicit layers given.
-        # TODO: Note this in the output, somewhere
-        pass
-    elif not isinstance(layers, list):
-        module.fail_json(msg="The 'layers' paramater must be a list of "
-                         "dictionaries.  Given {}.".format(type(layers)))
-    elif not all(isinstance(layer, dict) and len(layer) == 1 for layer in layers):
-        module.fail_json(msg="All elements in the 'layers' list must be "
-                         "dictionaries with a single key")
-    else:
-        for layer in layers:
-            key, value = layer.items()[0]
-            if key not in VALID_LAYER_ACTIONS:
-                module.fail_json(msg="Entry {0}={1} in the layer list is not allowed.  "
-                                 "The key '{0}' must be one of {2}".format(
-                                     key, value, ", ".join(VALID_LAYER_ACTIONS)))
-
     if not os.path.isdir(source):
         module.fail_json(msg="The source '{}' is not a directory or is not "
                          "accessible.".format(source))
@@ -305,13 +285,16 @@ def main():
         app_name = os.path.basename(source)
         app_name_source = "taken from source directory"
 
-    log_stream.write("Packaging {}   (App name {})\n".format(app_name, app_name_source))
+    log_stream.write(to_text("Packaging {}   (App name {})\n".format(app_name, app_name_source)))
 
     packager = AppPackager(source, app_name, output=log_stream)
 
     with packager:
         # combine expects as list of (action, pattern)
-        layer_filter = [layer.items() for layer in layers]
+        layer_filter = [(mode, pattern) for layer in layers
+                        for mode, pattern in layer.items() if pattern]
+        if layer_filter:
+            module.debug("Applying layer filter:  {0}".format(layer_filter))
         packager.combine(source, layer_filter,
                          layer_method=layer_method,
                          allow_symlink=follow_symlink)
@@ -326,7 +309,7 @@ def main():
             raise ValueError("Unknown value for 'local': {}".format(local))
 
         if block:
-            log_stream.write("Applying blocklist:  {!r}\n".format(block))
+            log_stream.write(to_text("Applying blocklist:  {!r}\n".format(block)))
             packager.blocklist(block)
 
         '''
@@ -345,8 +328,8 @@ def main():
         dest = dest_file or "{}-{{{{version}}}}.tgz".format(archive_base)
         archive_path = packager.make_archive(dest)
         size = os.stat(archive_path).st_size
-        log_stream.write("Archive created:  file={} size={:.2f}Kb\n".format(
-            os.path.basename(archive_path), size / 1024.0))
+        log_stream.write(to_text("Archive created:  file={} size={:.2f}Kb\n".format(
+            os.path.basename(archive_path), size / 1024.0)))
 
         # Should this be expanded to be an absolute path?
         ret["archive"] = archive_path
