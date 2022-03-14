@@ -37,8 +37,8 @@ def check_ksconf_version(module):
     try:
         from ksconf import __version__ as ksconf_version
     except ImportError:
-        return module.fail_json("Unable to import the 'ksconf' python module.  "
-                                "Try running 'pip install -U kintyre-splunk-config'")
+        module.fail_json(msg="Unable to import the 'ksconf' python module.  "
+                             "Try running 'pip install -U kintyre-splunk-config'")
 
     match = re.match(r'(\d+)\.(\d+)\.(\d+)(.*)$', ksconf_version)
     if match:
