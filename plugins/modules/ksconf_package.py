@@ -5,6 +5,7 @@ from __future__ import absolute_import, division, print_function
 
 import datetime
 import os
+import re
 
 from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import AnsibleModule
@@ -114,9 +115,12 @@ options:
 # set_version
 # set_build
 
-
 notes:
-    - Add comments about magic vars
+  - Several arguments accept ksconf variables.  Traditionally these are written in a Jinja-2 like
+    syntax, which is familiar, but leads to some confusion when embedded in an Ansible playbook.
+    To avoid Jinja escaping these variables manually, this modules supports I([[var]]) syntax too.
+    If the path includes I([[version]]) that will be tranlated to  I({{version}}) before be
+    handed to the ksconf tool.
 '''
 
 
@@ -182,7 +186,19 @@ EXAMPLES_ = r'''
     - exclude: 40-*
     - include: 40-{{env}}
 '''
-VALID_LAYER_ACTIONS = ["include", "exclude"]
+
+
+def translate_ksconf_vars(value):
+    """
+    Translate any '[[var]]' format into '{{var}}' format for ksconf.  This
+    allows playbook authors to write:
+        [[var]]
+    instead of:
+        {{'{{'}}version{{'}}'}}
+    """
+    if value:
+        return re.sub(r'\[\[(\s*[\w_]+\s*)\]\]', r"{{\1}}", value)
+    return value
 
 
 def main():
@@ -223,6 +239,10 @@ def main():
     local = params["local"]
     follow_symlink = module.boolean(params["follow_symlink"])
     app_name = params["app_name"]
+
+    # Convert any [[var]] --> {{var}} for ksconf
+    dest_file = translate_ksconf_vars(dest_file)
+    app_name = translate_ksconf_vars(app_name)
 
     # Copy 'context' through as-is
     if params["context"]:
