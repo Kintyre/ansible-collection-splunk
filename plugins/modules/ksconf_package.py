@@ -373,6 +373,10 @@ def main():
 
     ret["new_hash"] = new_hash
     ret["old_hash"] = existing_hash
+
+    # Fixup the 'layers' output (invocation/module_args/layers); drop empty
+    params["layers"] = {mode: pattern for layer in layers
+                        for mode, pattern in layer.items() if pattern}
     module.exit_json(**ret)
 
 
