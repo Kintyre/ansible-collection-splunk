@@ -9,6 +9,7 @@ from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import
 __metaclass__ = type
 
 import os
+from base64 import b64decode
 from tempfile import NamedTemporaryFile
 
 from ansible.errors import AnsibleAction, AnsibleActionFail, AnsibleActionSkip, AnsibleError
@@ -25,15 +26,35 @@ class ActionModule(ActionBase):
 
     TRANSFERS_FILES = True
 
-    def parse_remote_json_file(self, path):
+    def parse_remote_json_file(self, path, task_vars):
         display.vvv(u"JSON state  file={0}".format(path))
         with NamedTemporaryFile("rb+") as temp_f:
             try:
                 self._connection.fetch_file(path, temp_f.name)
             except AnsibleError as e:
-                # Q:  Can we confirm that e contains "No such file or directory"? Is there a clean way?
-                display.v(u"Missing JSON state file={0} exception={1}".format(path, to_text(e)))
-                return {}
+                # Sometimes this logic results in incorrect, but ignorable message on the first
+                # deploy when running with a single verbose ('-v') mode.
+                #  1:  Could not find file on the Ansible Controller.
+                #  2:  If you are using a module and expect the file to exist on the remote, see the remote_src option
+                # Maybe there's a way to clean that up?  Possibly by calling _execute_remote_stat() first???
+
+                # Try the legacy 'slurp' module.  This technique is borrowed from the bultin fetch
+                # action when "permissions are lacking or privilege escalation is needed"
+                slurp_res = self._execute_module(module_name='ansible.legacy.slurp',
+                                                 module_args=dict(src=path),
+                                                 task_vars=task_vars)
+                slurp_msg = slurp_res.get("msg", "")
+                if slurp_res.get('failed') or slurp_msg:
+                    display.vv(u"Failed to fetch JSON state using slurp.  "
+                               u"file={0} msg={1} first_exception={2}".format(
+                                   path, to_text(slurp_msg), to_text(e)))
+                    return {}
+                else:
+                    display.v(u"Found JSON state file={0} using slurp!".format(path))
+
+                    if slurp_res['encoding'] == u'base64':
+                        temp_f.write(b64decode(slurp_res['content']))
+
             temp_f.seek(0)
             data = json.load(temp_f)
             display.vvv(u"JSON state  file={0} data={1!r}".format(path, data))
@@ -88,7 +109,7 @@ class ActionModule(ActionBase):
                 state_file = os.path.join(dest, app_name, SIDELOAD_STATE_FILE)
                 hash = extras["hash"]
                 try:
-                    state = self.parse_remote_json_file(state_file)
+                    state = self.parse_remote_json_file(state_file, task_vars)
                     remote_hash = state.get("src_hash", None)
                     if remote_hash:
                         changed = hash != remote_hash
