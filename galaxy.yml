@@ -62,4 +62,5 @@ build_ignore:
   - ".*"
   - "venv"
   - "*.tar.gz"
+  - "*.spl"
   - inventory

@@ -1,6 +1,9 @@
 # Built collections
 *.tar.gz
 
+# Splunk packages (during testing)
+*.spl
+
 # Ansible lint
 .cache
 

@@ -293,9 +293,6 @@ def main():
     from io import StringIO
     log_stream = StringIO()
 
-    # XXX: This currently ignores the possibility of 'dest_file' containing arbitrary placeholders
-    existing_hash = gzip_content_hash(dest_file)
-
     # Just call combine (writing to a temporary directory) and the tar it up.
     # At some point this should all be done in memory, as this would allow for quicker
     # detection/reporting of changes to support idepotent behavior more efficiently.
@@ -346,6 +343,10 @@ def main():
 
         # Should we default 'dest' if no value is given???? -- this seems problematic (at least we need to be more specific, like include a hash of all found layers??)
         dest = dest_file or "{}-{{{{version}}}}.tgz".format(archive_base)
+
+        # Build hash of any existing 'dest' file to allow for idepotent operation
+        existing_hash = gzip_content_hash(packager.expand_var(dest))
+
         archive_path = packager.make_archive(dest)
         size = os.stat(archive_path).st_size
         log_stream.write(to_text("Archive created:  file={} size={:.2f}Kb\n".format(
