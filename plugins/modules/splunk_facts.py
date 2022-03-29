@@ -14,7 +14,7 @@ from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import
 __metaclass__ = type
 
 
-DOCUMENTATION = '''
+DOCUMENTATION = r'''
 ---
 module: splunk_facts
 short_description: Gathers facts about a Splunk installation
@@ -27,8 +27,18 @@ options:
               module will check the $SPLUNK_HOME environment variable
               and then several commonly used install paths.
         required: false
+        type: path
         default: null
-        version_added: 1.8
+    ksconf:
+        description:
+            - Set the level of ksconf detail to collect.
+            - Use I(skip) to disable all ksconf related facts,
+              I(short) to collect basic information,
+              and I(detail) to show information about the available subcommands.
+        choices: ["preserve", "block", "promote"]
+        type: str
+        required: false
+        default: short
 
 description:
     - This module collects various pieces of data about a Splunk installation
@@ -60,6 +70,17 @@ Notes about output layout:
       <config>
         <stanza>
           <key>
+    ansible_splunk_ksconf
+      version
+      vcs_info
+      build
+      package
+      path
+      commands
+        <name>
+          class
+          distro
+          error
 
 '''
 
@@ -71,7 +92,7 @@ SPLUNK_DIST_SEARCH_PUB_KEY = "etc/auth/distServerKeys/trusted.pem"
 
 
 class SplunkMetadata(object):
-    def __init__(self, module, splunk_home=None):
+    def __init__(self, module, splunk_home=None, ksconf_level="short"):
         self.module = module
         if not splunk_home:
             splunk_home = find_splunk_home()
@@ -86,6 +107,8 @@ class SplunkMetadata(object):
         self.fetch_dist_search_keys()
         self.fetch_guid()
         self.fetch_splunksecret()
+        if ksconf_level != "skip":
+            self.fetch_ksconf_version(ksconf_level)
         self._error = None
 
     def error(self, msg):
@@ -140,6 +163,46 @@ class SplunkMetadata(object):
         except Exception:
             self.error("Unable to read secret file: %s" % fn)
 
+    def fetch_ksconf_version(self, level):
+        try:
+            import ksconf
+            self._data["ksconf"] = {
+                "version": ksconf.__version__,
+                "vcs_info": ksconf.__vcs_info__,
+                "build": ksconf.__build__,
+                "package": ksconf.__package__,
+                "path": os.path.dirname(os.path.abspath(ksconf.__file__)),
+            }
+        except ImportError:
+            self._data["ksconf"] = None
+            self.error("Unable to locate ksconf python module")
+
+        if level != "detail":
+            return
+
+        try:
+            from ksconf.commands import get_all_ksconf_cmds
+            self._data["ksconf"]["commands"] = subcommands = {}
+            for ep in get_all_ksconf_cmds(on_error="return"):
+                # (name, entry, cmd_cls, error)
+                dist = ep.entry.dist
+                distro = ""
+                if hasattr(dist, "version"):
+                    if hasattr(dist, "name"):
+                        # entrypoints (required by ksconf)
+                        distro = "{}  ({})".format(dist.name, ep.entry.dist.version)
+                    elif hasattr(dist, "location") and hasattr(dist, "project_name"):
+                        # Attributes per pkg_resource
+                        distro = "{}  ({})  @{}".format(dist.project_name,
+                                                        dist.version, dist.location)
+                subcommands[ep.name] = {
+                    "class": str(ep.cmd_cls.__name__),
+                    "distro": distro,
+                    "error": ep.error
+                }
+        except ImportError:
+            self.error("Unable to report ksconf subcommands inventory")
+
     def return_facts(self):
         if self._fail:
             return dict(failed=True, msg=self._error)
@@ -156,14 +219,20 @@ def main():
     module = AnsibleModule(
         argument_spec=dict(
             splunk_home=dict(required=False, default=None),
+            ksconf=dict(type="str",
+                        choices=["skip", "short", "detail"],
+                        default="short")
         ),
         supports_check_mode=True
     )
 
     # Parameters
     splunk_home = module.params['splunk_home']
+    ksconf_level = module.params["ksconf"]
 
-    splunk_facts = SplunkMetadata(module, splunk_home=splunk_home)
+    splunk_facts = SplunkMetadata(module,
+                                  splunk_home=splunk_home,
+                                  ksconf_level=ksconf_level)
     output = splunk_facts.return_facts()
     module.exit_json(**output)
 
