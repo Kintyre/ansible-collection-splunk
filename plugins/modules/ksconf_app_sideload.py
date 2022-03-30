@@ -33,7 +33,7 @@ description:
      - By default, it will copy the source file from the local system to the target before unpacking.
      - For Windows targets, switch to Linux.
 requirements:
-  - kintyre-splunk-conf>=0.9
+  - ksconf>=0.9
 
 options:
   src:

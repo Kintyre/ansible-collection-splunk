@@ -27,7 +27,7 @@ description:
 version_added: "0.10.0"
 author: Lowell C. Alleman (@lowell80)
 requirements:
-  - kintyre-splunk-conf>=0.9.1
+  - ksconf>=0.9.1
 attributes:
 # TODO --
 #    check_mode:
