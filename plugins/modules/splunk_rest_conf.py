@@ -196,27 +196,35 @@ notes:
 EXAMPLES = '''
 Change the minimum free disk space:
 
-    - splunk_rest_conf: state=present username=admin password=manage
-                        conf=server stanza=diskUsage
-      args:
+    - cdi.splunk.splunk_rest_conf:
+        state: present
+        username: admin
+        password: "{{ secret_password }}"
+        conf: server
+        stanza: diskUsage
         settings:
           minFreeSpace: 3000
 
 For comparison, here's the same (offline) change using ini_file:
 
-    - ini_file: dest={{splunk_home}}/etc/system/local/server.conf
-                section=diskUsage option=minFreeSpace value=3000
+    - community.general.ini_file:
+        dest: "{{splunk_home}}/etc/system/local/server.conf"
+        section: diskUsage
+        option: minFreeSpace
+        value: 3000
 
 
 Here is an example of updating a Splunk license pool.  Note that the
 description and quota are only set the first time the pool is created.  After
 that Ansible will only update the "slaves" key.
 
-
-    -  splunk_rest_conf: splunkd_uri={{splunk_license_master_uri}}
-                        username={{splunk_admin_user}} password={{splunk_admin_pass}}
-                        state=present conf=server stanza=lmpool:MyLicesePool
-      args:
+    - splunk_rest_conf:
+        splunkd_uri: "{{splunk_license_master_uri}}"
+        username: "{{splunk_admin_user}}"
+        password: "{{splunk_admin_pass}}"
+        state: present
+        conf: "server"
+        stanza: lmpool:MyLicesePool
         settings:
           slaves: "{{guids}}"
           stack_id: enterprise
@@ -278,7 +286,7 @@ class SplunkRestConf(object):
         solution is to teach the users to use the canonical names for boolean
         values.)
         """
-        for (key, value) in update.iteritems():
+        for (key, value) in update.items():
             if key not in baseline:
                 return False
             if str(baseline[key]) != str(value):
@@ -293,16 +301,23 @@ class SplunkRestConf(object):
         if del_unknown:
             output["failed"] = True
             output["msg"] = "The 'del_unknown' functionality hasn't been implemented yet!"
-            return
+            return output
         stanza_dict = {}
         created = False
         do_update = False
 
+        # This can happen due to a bad conf type OR an invalid (or disabled) app namespace
+        try:
+            conf = self.service.confs[confName]
+        except KeyError as e:
+            output["failed"] = True
+            output["msg"] = "Unable to update due to error: {0}".format(e)
+
         # Attempt to fetch existing entry, or create a new one
         try:
-            stanza = self.service.confs[confName][stanzaName]
+            stanza = conf[confName][stanzaName]
         except KeyError:
-            stanza = self.service.confs[confName].create(stanzaName)
+            stanza = conf[confName].create(stanzaName)
             created = True
 
         # Determine if settings need to be updated
