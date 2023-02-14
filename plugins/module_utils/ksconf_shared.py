@@ -11,7 +11,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.common.text.converters import to_native
 
 
-__version__ = "0.14.2"
+__version__ = "0.15.0"
 
 SIDELOAD_STATE_FILE = ".ksconf_sideload.json"
 
