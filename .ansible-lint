@@ -38,6 +38,8 @@ use_default_rules: true
 skip_list:
   - skip_this_tag
   - git-latest
+  - galaxy[version-incorrect] # Until we reach version 1.0.0
+  - meta-runtime[unsupported-version] # I think this is a lie.  Disabling for now as we will always try to support a wide range of versions
 
 # Any rule that has the 'opt-in' tag will not be loaded unless its 'id' is
 # mentioned in the enable_list:
