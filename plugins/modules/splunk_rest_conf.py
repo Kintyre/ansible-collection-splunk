@@ -311,13 +311,14 @@ class SplunkRestConf(object):
             conf = self.service.confs[confName]
         except KeyError as e:
             output["failed"] = True
-            output["msg"] = "Unable to update due to error: {0}".format(e)
+            output["msg"] = "Conf error: {0}".format(e)
+            return output
 
         # Attempt to fetch existing entry, or create a new one
         try:
-            stanza = conf[confName][stanzaName]
+            stanza = conf[stanzaName]
         except KeyError:
-            stanza = conf[confName].create(stanzaName)
+            stanza = conf.create(stanzaName)
             created = True
 
         # Determine if settings need to be updated
@@ -358,7 +359,13 @@ class SplunkRestConf(object):
         """
         output = {}
         try:
-            stanza = self.service.confs[confName][stanzaName]
+            conf = self.service.confs[confName]
+        except KeyError as e:
+            output["failed"] = True
+            output["msg"] = "Conf error: {0}".format(e)
+            return output
+        try:
+            stanza = conf[stanzaName]
             output["result"] = "present"
         except KeyError:
             output["result"] = "missing"
@@ -375,7 +382,13 @@ class SplunkRestConf(object):
         """
         output = {}
         try:
-            stanza = self.service.confs[confName][stanzaName]
+            conf = self.service.confs[confName]
+        except KeyError as e:
+            output["failed"] = True
+            output["msg"] = "Conf error: {0}".format(e)
+            return output
+        try:
+            stanza = conf[stanzaName]
             # May be informative to the caller (possibly a "move" use-case)
             output["content"] = dict(stanza.content)
             output["result"] = "deleted"
