@@ -27,7 +27,7 @@ SPLUNK_SDK_SEARCH_PATH = [
 ]
 
 
-DOCUMENTATION = '''
+DOCUMENTATION = r'''
 ---
 module: splunk_user
 short_description: Manage Splunk user accounts
@@ -128,8 +128,10 @@ options:
     roles:
         description:
             - Comma separated list of role associated with the Splunk user.
+        type: list
+        elements: str
         required: true
-        default: user
+        default: ["user"]
 
     tz:
         description:
@@ -157,34 +159,45 @@ options:
             - Email address associated with the Splunk user.
         required: false
         default: null
-
-# Perhaps someday Ansible module docs will include something like this....
-
-outputs:
-    result:
-        description:
-            - The overall result of the module run.
-            - Options include C(created), C(updated), C(deleted), or C(unchanged)
-    token:
-        description:
-            - The Splunk auth token created used for the REST API calls.
-            - This value can be passed into I(token) of a subsequent REST-based operation.
-#notes:
 '''
 
-EXAMPLES = '''
-Create a new user named 'bob':
+RETURN = r'''
+result:
+  description:
+    - The overall result of the module run.
+    - Options include C(created), C(updated), C(deleted), or C(unchanged)
+  returned: always
+  type: str
+  sample: updated
+token:
+  description:
+    - The Splunk auth token created used for the REST API calls.
+    - This value can be passed into I(token) of a subsequent REST-based operation.
+endpoint:
+  description: URL used to edit the user object
+  type: str
 
-- splunk_user: state=present
-               username=admin password=manage
-               splunk_user=bob splunk_pass=aReallyGoodPassword
-               roles=user,admin tz=America/New_York
+'''
 
+EXAMPLES = r'''
+- name: Create a new user named 'bob'
+  splunk_user:
+    state: present
+    username: admin
+    password: manage
+    splunk_user: bob
+    splunk_pass: aReallyGoodPassword
+    roles: user,admin
+    tz: America/New_York
 
-Change the password of existing user 'joe':
-- splunk_user: state=present update_password=true
-               username=admin password=manage
-               splunk_user=joe splunk_pass=NewPassWord
+- name: Change the password of existing user 'joe'
+  splunk_user:
+    state: present
+    update_password: true
+    username: admin
+    password: manage
+    splunk_user: joe
+    splunk_pass: NewPassWord
 '''
 
 
@@ -243,7 +256,7 @@ def connect(module, uri, username, password, token=None, owner=None, app=None, s
 def create_user(module, service, params):
     splunk_user = params["splunk_user"]
     splunk_pass = params["splunk_pass"]
-    roles = [r.strip() for r in params["roles"].split(",")]
+    roles = params["roles"]
     realname = params["realname"]
     tz = params["tz"]
     email = params["email"]
@@ -369,7 +382,7 @@ def main():
             # User settings
             splunk_user=dict(required=True),
             splunk_pass=dict(default=None, no_log=True),
-            roles=dict(default="user"),
+            roles=dict(type="list", elements="str", default=["user"]),
             tz=dict(default=None),
             realname=dict(default=None),
             defaultapp=dict(default=None),

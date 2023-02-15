@@ -44,7 +44,7 @@ options:
   dest:
     description:
       - Remote absolute path where the archive should be unpacked.
-      - Typically this will be C(/opt/splunk/etc/apps) or a management folder like C(deployment-apps), C(slave-apps), or C(shcluster/apps).
+      - Typically this will be C(/opt/splunk/etc/apps) or a management folder like C(deployment-apps), C(manager-apps) (or C(master-apps) pre Splunk 9.0), or C(shcluster/apps).
     type: path
     required: true
   io_buffer_size:
