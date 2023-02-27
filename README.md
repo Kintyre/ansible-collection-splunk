@@ -36,4 +36,5 @@ ansible -i inventory -m cdillc.splunk.splunk_control -a "state=restarted usernam
 ansible -m cdillc.splunk.ksconf_package -a "source=/data/repos/my_apps/kintyre-spl file=/tmp/kintyre-splunk-app.spl local=preserve" localhost
 ansible -m cdillc.splunk.ksconf_app_sideload -a "src=/tmp/kintyre-splunk-app.spl dest=$SPLUNK_HOME/etc/apps list_files=true" localhost
 
+ansible -m debug  -a 'msg="Keep day for {{ "7d" | cdillc.splunk.reltime_to_sec }} seconds"' localhost
 ```
