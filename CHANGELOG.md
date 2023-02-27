@@ -2,6 +2,8 @@
 
 * Add `reltime_to_sec` filter that will convert human a subset of Splunk's readable "relative time" format to seconds.
   For example `{{reltime_to_sec("7d")}}` will return `604800`
+* Minor doc/example improvements
+* Minor tweaks to argument handling for the `splunk_user` module.
 
 ## Release 0.15.1 (2023-02-14)
 * Fixed typo in `splunk_rest_conf` module.
