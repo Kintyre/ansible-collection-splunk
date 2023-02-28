@@ -22,7 +22,7 @@ DOCUMENTATION = r'''
 module: ksconf_package
 short_description: Create a Splunk app from a local directory
 description:
-    - Build a Splunk app using the I(ksconf package) functionality.
+    - Build a Splunk app using the I(ksconf) package.
     - The source directory may contain layers
 version_added: "0.10.0"
 author: Lowell C. Alleman (@lowell80)
@@ -107,7 +107,7 @@ options:
 
     context:
         description:
-            -Free-form metadata that is passed through to the output.
+            - Free-form metadata that is passed through to the output.
             - Use this to pass around important app context variables that can
               be conveniently retained when looping and using C(register).
         type: dict
@@ -119,7 +119,7 @@ notes:
   - Several arguments accept ksconf variables.  Traditionally these are written in a Jinja-2 like
     syntax, which is familiar, but leads to some confusion when embedded in an Ansible playbook.
     To avoid Jinja escaping these variables manually, this modules supports I([[var]]) syntax too.
-    If the path includes I([[version]]) that will be tranlated to  I({{version}}) before be
+    If the path includes I([[version]]) that will be translated to I({{version}}) before be
     handed to the ksconf tool.
 '''
 
@@ -165,7 +165,7 @@ old_hash:
     sample: e1617a87ea51c0ca930285c0ce60af4308513ea426ae04be42b1d7b47aba16a5
 
 context:
-    description: Optional pass-through field.  See the C(context) paramater.
+    description: Optional pass-through field.  See the C(context) parameter.
     type: dict
     returned: when provided
 '''
@@ -175,16 +175,16 @@ EXAMPLES_ = r'''
 
 - name: Build addon using a specific set of layers
   cdillc.splunk.ksconf_package:
-  source: "{{app_repo}}/Splunk_TA_nix"
-  file: "{{install_root}}/build/Splunk_TA_nix.spl"
-  block: [*.sample]
-  local: preserve
-  follow_symlink: false
-  layers:
-    - exclude: 30-*
-    - include: 30-{{role}}
-    - exclude: 40-*
-    - include: 40-{{env}}
+    source: "{{app_repo}}/Splunk_TA_nix"
+    file: "{{install_root}}/build/Splunk_TA_nix.spl"
+    block: [*.sample]
+    local: preserve
+    follow_symlink: false
+    layers:
+        - exclude: 30-*
+        - include: 30-{{role}}
+        - exclude: 40-*
+        - include: 40-{{env}}
 '''
 
 
@@ -368,7 +368,7 @@ def main():
     ret["delta"] = to_text(delta)
     ret["stdout"] = to_text(log_stream.getvalue())
 
-    # Inefficient idepotent implementation; but it works with ksconf 0.9.1
+    # Inefficient idempotent implementation; but it works with ksconf 0.9.1
     new_hash = gzip_content_hash(ret["archive"])
     ret["changed"] = new_hash != existing_hash
 

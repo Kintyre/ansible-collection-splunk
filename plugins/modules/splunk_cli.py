@@ -88,6 +88,15 @@ options:
 #        required: false
 #        default: null
 
+    hidden_args:
+        description:
+            - Specify additional arguments without logging values.
+            - These will be appended to C(cmd) when the command is called.
+            - A leading dash will be added to keys to simplify the YAML syntax.
+        required: false
+        default: null
+        type: dict
+
     splunk_home:
         description:
             - The Splunk installation home.  $SPLUNK_HOME
@@ -103,14 +112,36 @@ options:
 #notes:
 '''
 
-EXAMPLES = '''
-Reload the deployment server:
+EXAMPLES_ = r'''
 
-- splunk_cli:
+- name: Reload the deployment server:
+  cdillc.splunk.splunk_cli:
     cmd: reload deploy-server
     splunk_home: "{{splunk_home}}"
     username: "{{splunk_admin_user}}"
     password: "{{splunk_admin_pass}}"
+
+- name: Update CM URL and secret (note that '-secret' is not logged)
+  cdillc.splunk.splunk_cli:
+    cmd: edit cluster-config -master_uri {{cm_url}}
+    hidden_args:
+      secret: "{{ cm_secret }}"
+    splunk_home: "{{splunk_home}}"
+    username: "{{splunk_admin_user}}"
+    password: "{{splunk_admin_pass}}"
+
+- name: Add search peer
+   cdillc.splunk.splunk_cli
+    cmd: add search-server {{sh_url}}
+    hidden_args:
+      remoteUsername: "{{ sh_user }}"
+      remotePassword: "{{ sh_pass }}"
+    splunk_home: "{{splunk_home}}"
+    username: "{{splunk_admin_user}}"
+    password: "{{splunk_admin_pass}}"
+    creates: "{{splunk_home}}/.search-peer-added-{{ sh_url | urlencode }}"
+    create_on_success: true
+
 '''
 
 
@@ -127,6 +158,7 @@ def main():
             username=dict(default=None),
             password=dict(default=None, no_log=True),
             # token=dict(default=None, no_log=True),
+            hidden_args=dict(type="dict", default=None, no_log=True),
             # Borrowed from the shell/command module
             creates=dict(default=None),
             removes=dict(default=None),
@@ -140,6 +172,7 @@ def main():
     splunk_pass = module.params['password']
     creates = module.params['creates']
     removes = module.params['removes']
+    hidden_args = module.params["hidden_args"]
     create_on_success = module.params['create_on_success']
 
     if (splunk_user or splunk_pass) and not (splunk_user and splunk_pass):
@@ -195,6 +228,13 @@ def main():
         # Tell splunk CLI to issue command to remote Splunk instance
         args.append("-uri")
         args.append(splunk_uri)
+
+    if hidden_args:
+        for arg, value in hidden_args.values():
+            if not arg.startswith("-"):
+                arg = "-" + arg
+            args.append(arg)
+            args.append(to_text(value))
 
     rc, out, err = module.run_command(args, executable=executable, use_unsafe_shell=False)
 

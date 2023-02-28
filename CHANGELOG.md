@@ -1,3 +1,7 @@
+## Release 0.16.2 (2023-02-28)
+* `splunk_cli` now supports `hidden_args` which allows things like `-secret` and `-remotePassword` to be passed in securely without being logged.
+* Minor documentation improvements.
+
 ## Release 0.16.1 (2023-02-27)
 * Minor improvements to `reltime_to_sec` to support weeks, months, and years & add to main README.
 
