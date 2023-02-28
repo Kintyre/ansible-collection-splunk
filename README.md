@@ -18,7 +18,7 @@ Filters for the collection
 
 | Filter | Description |
 | ------ | ----------- |
-| `reltime_to_sec` | Convert a Splunk relative time string into seconds.  For example, in indexes.conf: `frozenTimePeriodInSecs = {{ "7d" |  cdillc.splunk.reltime_to_sec }}`.  The suffixes `s`, `m`, `h`, `d`, `y` are supported. |
+| `reltime_to_sec` | Convert a Splunk relative time string into seconds.  For example, in indexes.conf: `frozenTimePeriodInSecs = {{ "7d" \|  cdillc.splunk.reltime_to_sec }}`.  The suffixes `s`, `m`, `h`, `d`, `y` are supported. |
 
 ## Testing
 
