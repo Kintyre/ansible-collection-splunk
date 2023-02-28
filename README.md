@@ -14,6 +14,11 @@ Modules for the collection.
 | `splunk_user` | Manipulate local Splunk user accounts.  Add, delete, modify, or change password. |
 
 
+Filters for the collection
+
+| Filter | Description |
+| ------ | ----------- |
+| `reltime_to_sec` | Convert a Splunk relative time string into seconds.  For example, in indexes.conf: `frozenTimePeriodInSecs = {{ "7d" |  cdillc.splunk.reltime_to_sec }}`.  The suffixes `s`, `m`, `h`, `d`, `y` are supported. |
 
 ## Testing
 

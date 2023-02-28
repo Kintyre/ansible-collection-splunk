@@ -16,17 +16,25 @@ def reltime_to_sec(value):
     :return: python object representation of the given relative time
     :rtype: float
     """
-    pattern = re.compile(r"(\d+)([dhms]?)")
+    # Strongly borrowed from cypresspoint.datatype.reltime_to_timedelta.
+    # Copied not referenced to avoid additional runtime dependencies.
+    pattern = re.compile(r"(\d+)(mon|[dhmswy]?)")
     suffix_map = {
         "s": "seconds",
         "m": "minutes",
         "h": "hours",
         "d": "days",
+        "w": "weeks",
+    }
+    suffix_day_multiplier = {
+        "y": 365,
+        "mon": 30,
     }
     m = pattern.match(value)
     if m is None:
         raise ValueError("Unsupported span value: '{0}'  "
-                         "Supports formats like '7d', '2h', and '15m'".format(value))
+                         "Supports formats like '3y', '6mon', '3w', '7d', "
+                         "'2h' and '15m'".format(value))
     v, suffix = m.groups()
     try:
         v = int(v)
@@ -34,8 +42,9 @@ def reltime_to_sec(value):
         raise ValueError("Unsupported value: '{0}'".format(value))
     if not suffix:
         suffix = "s"
-    td_arg = suffix_map[suffix]
-    kwargs = {td_arg: v}
+    td_arg = suffix_map.get(suffix, "days")
+    multiplier = suffix_day_multiplier.get(suffix, 1)
+    kwargs = {td_arg: v * multiplier}
     delta = timedelta(**kwargs)
     return int(delta.total_seconds())
 

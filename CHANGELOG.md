@@ -1,3 +1,6 @@
+## Release 0.16.1 (2023-02-27)
+* Minor improvements to `reltime_to_sec` to support weeks, months, and years & add to main README.
+
 ## Release 0.16.0 (2023-02-27)
 
 * Add `reltime_to_sec` filter that will convert human a subset of Splunk's readable "relative time" format to seconds.
