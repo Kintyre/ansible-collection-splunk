@@ -344,9 +344,11 @@ def main():
         # Should we default 'dest' if no value is given???? -- this seems problematic (at least we need to be more specific, like include a hash of all found layers??)
         dest = dest_file or "{}-{{{{version}}}}.tgz".format(archive_base)
 
-        # Build hash of any existing 'dest' file to allow for idepotent operation
+        # Build hash of any existing 'dest' file to allow for idempotent operation
         existing_hash = gzip_content_hash(packager.expand_var(dest))
 
+        # TODO:  Ensure that creation of dest is not interrupted (either in ksconf level or here)
+        #        Incomplete output files should never end up in dest.  (temp file rename pattern?)
         archive_path = packager.make_archive(dest)
         size = os.stat(archive_path).st_size
         log_stream.write(to_text("Archive created:  file={} size={:.2f}Kb\n".format(

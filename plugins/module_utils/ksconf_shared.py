@@ -58,19 +58,23 @@ def gzip_content_hash(filename, blocksize=64 * 1024):
     will show as a modification.  Eventually, input change detection support
     should supersede all this wonkyness.
     """
-    from gzip import GzipFile
+    from gzip import BadGzipFile, GzipFile
     from hashlib import sha256
     filename = os.path.realpath(filename)
     if not os.path.isfile(filename):
         return None
 
-    digest = sha256()
-    with GzipFile(filename, "rb") as stream:
-        block = stream.read(blocksize)
-        while block:
-            digest.update(block)
+    try:
+        digest = sha256()
+        with GzipFile(filename, "rb") as stream:
             block = stream.read(blocksize)
-        return digest.hexdigest()
+            while block:
+                digest.update(block)
+                block = stream.read(blocksize)
+            return digest.hexdigest()
+    except BadGzipFile:
+        # Ideally this would be logged...
+        return None
 
 
 def get_app_info_from_spl(tarball, calc_hash=True):
