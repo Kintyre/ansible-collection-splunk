@@ -42,4 +42,10 @@ ansible -m cdillc.splunk.ksconf_package -a "source=/data/repos/my_apps/kintyre-s
 ansible -m cdillc.splunk.ksconf_app_sideload -a "src=/tmp/kintyre-splunk-app.spl dest=$SPLUNK_HOME/etc/apps list_files=true" localhost
 
 ansible -m debug  -a 'msg="Keep day for {{ "7d" | cdillc.splunk.reltime_to_sec }} seconds"' localhost
+
+ansible -i inventory -m cdillc.splunk.splunk_user -a "state=present splunk_user=new_user splunk_pass=anewpassword username=admin password=$SPLUNK_PASS roles=user" splunk
+
+ansible -m cdillc.splunk.ksconf_app_sideload -a "src=splunk-ta-aws-5.0.0-e3e6808.spl dest=/opt/splunk/etc/deployment-apps" -b --become-user splunk --become-password-file x splunk -i inventory
+
+ansible -m cdillc.splunk.splunk_facts splunk -i inventory -b --become-user splunk --become-password-file x
 ```

@@ -4,11 +4,11 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
+import json
 import os
 import re
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.common.text.converters import to_native
 
 
 __version__ = "0.16.1"
@@ -114,3 +114,65 @@ def get_app_info_from_spl(tarball, calc_hash=True):
         # TODO: Find a more efficient way to get this hash (instead of reading from disk twice)
         extras["hash"] = gzip_content_hash(tarball)
     return app_names, app_conf, extras
+
+
+# Which app.conf stanzas / attributes should be returned as facts
+keep_app_conf_pairs = [
+    ("launcher", [
+        "version",
+        "author",
+        "description"]),
+    ("install", [
+        "state",
+        "build"]),
+    ("package", [
+        "id",
+        "check_for_updates"]),
+    ("ui", [
+        "label",
+        "is_visible"]),
+]
+
+
+def get_app_facts(app_path,
+                  use_appconf=True,
+                  use_sideload_state=True):
+    """
+    Get various facts related to a local Splunk application.
+    """
+    facts = {}
+    from pathlib import Path
+
+    from ksconf.conf.merge import merge_conf_dicts
+    from ksconf.conf.parser import PARSECONF_LOOSE, parse_conf
+
+    app_path = Path(app_path)
+
+    if use_appconf:
+        app_conf_paths = [
+            app_path / "default" / "app.conf",
+            app_path / "local" / "app.conf"]
+        conf = {}
+        for app_conf_path in app_conf_paths:
+            if app_conf_path.is_file():
+                conf = merge_conf_dicts(conf, parse_conf(app_conf_path, PARSECONF_LOOSE))
+        if conf:
+            facts["app_conf"] = {}
+
+        for stanza_name, attributes in keep_app_conf_pairs:
+            if stanza_name in conf:
+                stanza = conf[stanza_name]
+                for attr in attributes:
+                    if attr in stanza:
+                        facts["app_conf"][attr] = stanza[attr]
+
+    if use_sideload_state:
+        state_file = app_path / SIDELOAD_STATE_FILE
+        if state_file.is_file():
+            with open(state_file) as fp:
+                data = json.load(fp)
+            # XXX: Maybe filter / pre-process this info somehow (this could get very large
+            #      once manifest is added)
+            facts["sideload"] = data
+
+    return facts

@@ -1,3 +1,6 @@
+## Release 0.17 (2023-03-23)
+* Add app tracking support in `splunk_facts` module.
+
 ## Release 0.16.2 (2023-02-28)
 * `splunk_cli` now supports `hidden_args` which allows things like `-secret` and `-remotePassword` to be passed in securely without being logged.
 * Minor documentation improvements.

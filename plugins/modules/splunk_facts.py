@@ -8,7 +8,8 @@ import os
 import re
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import find_splunk_home
+from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (find_splunk_home,
+                                                                                  get_app_facts)
 
 
 __metaclass__ = type
@@ -39,9 +40,18 @@ options:
         type: str
         required: false
         default: short
+    app_dirs:
+        description:
+            - List of paths (relative to I($SPLUNK_HOME/etc)).
+            - And absolute path can be provided to check a specific path.
+        type: list
+        required: false
+        elements: str
+        default: [apps, deployment-apps, shcluster/apps, manager-apps, master-apps]
 
 description:
-    - This module collects various pieces of data about a Splunk installation
+    - This module collects various pieces of data about a Splunk installation.
+    - Splunk apps data collection.
 notes:
     - Parameters to enable/disable various config or run-time stats may be added later.
 
@@ -81,7 +91,24 @@ Notes about output layout:
           class
           distro
           error
-
+    ansible_splunk_apps:
+        name
+        root
+        path
+        app_conf
+            version
+            author
+            description
+            state
+            build
+            check_for_updates
+            label
+            is_visible
+        sideload
+            ansible_module_version
+            installed_at
+            src_hash
+            src_path
 '''
 
 
@@ -89,10 +116,18 @@ SPLUNK_VERSION = "etc/splunk.version"
 SPLUNK_INSTANCE_CFG = "etc/instance.cfg"
 SPLUNK_AUTH_SECRET = "etc/auth/splunk.secret"
 SPLUNK_DIST_SEARCH_PUB_KEY = "etc/auth/distServerKeys/trusted.pem"
+SPLUNK_APP_DIRS = [
+    "apps",
+    "deployment-apps",
+    "shcluster/apps",
+    "manager-apps",
+    "master-apps",
+]
 
 
 class SplunkMetadata(object):
-    def __init__(self, module, splunk_home=None, ksconf_level="short"):
+    def __init__(self, module, splunk_home=None, ksconf_level="short",
+                 app_dirs=()):
         self.module = module
         if not splunk_home:
             splunk_home = find_splunk_home()
@@ -101,6 +136,7 @@ class SplunkMetadata(object):
                 return
         self.splunk_home = splunk_home
         self._fail = False
+        self._error = None
         self._data = {}
         self._prefix = 'ansible_splunk_%s'
         self.fetch_version()
@@ -109,7 +145,8 @@ class SplunkMetadata(object):
         self.fetch_splunksecret()
         if ksconf_level != "skip":
             self.fetch_ksconf_version(ksconf_level)
-        self._error = None
+        for app_dir in app_dirs:
+            self.fetch_app_info(app_dir)
 
     def error(self, msg):
         self._error = msg
@@ -159,9 +196,12 @@ class SplunkMetadata(object):
         fn = os.path.join(self.splunk_home, SPLUNK_AUTH_SECRET)
         try:
             # Note could use module.sha1(filename) instead ....
-            self._data["secret_hash"] = hashlib.sha1(open(fn).read()).hexdigest()
-        except Exception:
-            self.error("Unable to read secret file: %s" % fn)
+            h = hashlib.new("sha256")
+            with open(fn, "rb") as f:
+                h.update(f.read())
+            self._data["secret_hash"] = h.hexdigest()
+        except Exception as e:
+            self.error(f"Unable to read secret file: {fn}  Exception={e}")
 
     def fetch_ksconf_version(self, level):
         try:
@@ -203,6 +243,38 @@ class SplunkMetadata(object):
         except ImportError:
             self.error("Unable to report ksconf subcommands inventory")
 
+    def fetch_app_info(self, _app_root):
+        # Classic LIST of DICT question... not sure which is better
+        app_facts = self._data.setdefault("apps", [])
+        app_root = _app_root
+
+        if not os.path.isabs(app_root):
+            app_root = os.path.join(self.splunk_home, "etc", app_root)
+
+        if not os.path.isdir(app_root):
+            self._data.setdefault("app_root_missing", []).append(app_root)
+            return
+
+        for app_name in os.listdir(app_root):
+            app_path = os.path.join(app_root, app_name)
+            if not os.path.isdir(app_path):
+                continue
+            info = {
+                "name": app_name,
+                "root": _app_root,
+                "path": app_path
+            }
+
+            collect_appconf = True
+            if self._data["ksconf"] is None:
+                collect_appconf = False
+            try:
+                d = get_app_facts(app_path, use_appconf=collect_appconf)
+                info.update(d)
+            except ValueError as e:
+                info["error"] = f"{e}"
+            app_facts.append(info)
+
     def return_facts(self):
         if self._fail:
             return dict(failed=True, msg=self._error)
@@ -221,7 +293,11 @@ def main():
             splunk_home=dict(required=False, default=None),
             ksconf=dict(type="str",
                         choices=["skip", "short", "detail"],
-                        default="short")
+                        default="short"),
+            app_dirs=dict(type="list",
+                          elements="str",
+                          required=False,
+                          default=SPLUNK_APP_DIRS)
         ),
         supports_check_mode=True
     )
@@ -229,10 +305,12 @@ def main():
     # Parameters
     splunk_home = module.params['splunk_home']
     ksconf_level = module.params["ksconf"]
+    app_dirs = module.params["app_dirs"]
 
     splunk_facts = SplunkMetadata(module,
                                   splunk_home=splunk_home,
-                                  ksconf_level=ksconf_level)
+                                  ksconf_level=ksconf_level,
+                                  app_dirs=app_dirs)
     output = splunk_facts.return_facts()
     module.exit_json(**output)
 
