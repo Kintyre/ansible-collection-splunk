@@ -124,13 +124,23 @@ keep_app_conf_pairs = [
         "description"]),
     ("install", [
         "state",
-        "build"]),
+        "build",
+        "is_configured",
+        "allows_disable",
+        "install_source_checksum",
+        "install_source_local_checksum",
+        "state_change_requires_restart",
+    ]),
     ("package", [
         "id",
         "check_for_updates"]),
     ("ui", [
         "label",
         "is_visible"]),
+    ("shclustering", [
+        "deployer_lookups_push_mode",
+        "deployer_push_mode"]
+     )
 ]
 
 

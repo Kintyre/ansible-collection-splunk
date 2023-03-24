@@ -121,7 +121,9 @@ SPLUNK_APP_DIRS = [
     "deployment-apps",
     "shcluster/apps",
     "manager-apps",
+    "peer-apps",
     "master-apps",
+    "slave-apps",
 ]
 
 
