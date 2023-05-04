@@ -122,6 +122,7 @@ SPLUNK_APP_DIRS = [
     "shcluster/apps",
     "manager-apps",
     "peer-apps",
+    # Drop these after 8.x support is fully gone (Not before 2025)
     "master-apps",
     "slave-apps",
 ]
