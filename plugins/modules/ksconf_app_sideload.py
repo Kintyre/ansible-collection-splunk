@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-
+#
+# MODULE:  (This runs on the target node)
+#
 from __future__ import absolute_import, division, print_function
 
 import json
@@ -23,6 +25,10 @@ from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import
 __metaclass__ = type
 
 
+ksconf_min_version = (0, 9)
+ksconf_min_version_text = ".".join("{}".format(i) for i in ksconf_min_version)
+
+
 DOCUMENTATION = r'''
 ---
 module: ksconf_app_sideload
@@ -33,7 +39,7 @@ description:
      - By default, it will copy the source file from the local system to the target before unpacking.
      - For Windows targets, switch to Linux.
 requirements:
-  - ksconf>=0.9
+  - ksconf>={}
 
 options:
   src:
@@ -108,7 +114,7 @@ notes:
       If this cause an issue for you, open a bug report and describe your use case.
 #    - Existing files/directories in the destination which are not in the archive
 #      are not touched. This is the same behavior as a normal archive extraction.
-'''
+'''.format(ksconf_min_version_text)
 
 
 """
@@ -307,9 +313,10 @@ def main():
     )
 
     ksconf_version = check_ksconf_version(module)
-    if ksconf_version < (0, 9):
-        module.warn("ksconf version {} is older than v0.9.  This may result in "
-                    "unexpected behavior.  Please upgrade ksconf.".format(ksconf_version))
+    if ksconf_version < ksconf_min_version:
+        module.warn("ksconf version {} is older than v{}.  This may result in "
+                    "unexpected behavior.  Please upgrade ksconf.".format(ksconf_version,
+                                                                          ksconf_min_version_text))
 
     src = module.params['src']
     src_orig = module.params["src_orig"]
@@ -364,7 +371,7 @@ def main():
     # DEBUG
     # res_args['check_results'] = check_results
 
-    # Cleanup paramater to better match user's intention (Impacts the invocation/module_args output)
+    # Cleanup parameter to better match user's intention (Impacts the invocation/module_args output)
     module.params["src"] = src_orig
     del module.params["src_orig"]
 

@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+#
+# ACTION:  (This runs on the controller!)
+#
 from __future__ import absolute_import, division, print_function
 
 import json
@@ -38,7 +42,7 @@ class ActionModule(ActionBase):
                 #  2:  If you are using a module and expect the file to exist on the remote, see the remote_src option
                 # Maybe there's a way to clean that up?  Possibly by calling _execute_remote_stat() first???
 
-                # Try the legacy 'slurp' module.  This technique is borrowed from the bultin fetch
+                # Try the legacy 'slurp' module.  This technique is borrowed from the builtin fetch
                 # action when "permissions are lacking or privilege escalation is needed"
                 slurp_res = self._execute_module(module_name='ansible.legacy.slurp',
                                                  module_args=dict(src=path),
@@ -115,6 +119,10 @@ class ActionModule(ActionBase):
                         changed = hash != remote_hash
                     else:
                         changed = True
+                except json.decoder.JSONDecodeError as e:
+                    display.warning(u"Remote JSON state file {0} is corrupt.  "
+                                    "App will be replaced.  {1}".format(state_file, e))
+                    changed = True
                 except AnsibleError as e:
                     # This shouldn't be possible any more....
                     raise AnsibleActionFail(to_text(e))
