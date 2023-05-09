@@ -31,6 +31,13 @@ class ActionModule(ActionBase):
     TRANSFERS_FILES = True
 
     def parse_remote_json_file(self, path, task_vars):
+        """
+        Fetch remote state file (.json) to determine if the app has changed
+        since last deployment.
+
+        The remote json file must be copied to a temporary named file to be
+        parsed locally.
+        """
         display.vvv(u"JSON state  file={0}".format(path))
         with NamedTemporaryFile("rb+") as temp_f:
             try:
@@ -47,11 +54,14 @@ class ActionModule(ActionBase):
                 slurp_res = self._execute_module(module_name='ansible.legacy.slurp',
                                                  module_args=dict(src=path),
                                                  task_vars=task_vars)
-                slurp_msg = slurp_res.get("msg", "")
+                slurp_msg = to_text(slurp_res.get("msg", ""))
                 if slurp_res.get('failed') or slurp_msg:
+                    if slurp_msg.startswith("file not found:"):
+                        # No need to show a message
+                        return {}
                     display.vv(u"Failed to fetch JSON state using slurp.  "
                                u"file={0} msg={1} first_exception={2}".format(
-                                   path, to_text(slurp_msg), to_text(e)))
+                                   path, slurp_msg, to_text(e)))
                     return {}
                 else:
                     display.v(u"Found JSON state file={0} using slurp!".format(path))
@@ -163,6 +173,9 @@ class ActionModule(ActionBase):
             else:
                 # TODO:  If list_files is set, we could (eventually) capture that from the state file (not yet present)
                 result["changed"] = False
+                result["hash"] = remote_hash
+                result["installed_at"] = state.get("installed_at", None)
+                result["app_info"] = {"name": app_name}
 
         except AnsibleAction as e:
             result.update(e.result)
