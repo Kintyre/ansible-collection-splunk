@@ -7,12 +7,13 @@ from __future__ import absolute_import, division, print_function
 import json
 import os
 import time
+from pathlib import Path
 
 from ansible.module_utils._text import to_bytes, to_native
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
     SIDELOAD_STATE_FILE, __version__ as collection_version,
-    check_ksconf_version, get_app_info_from_spl)
+    check_ksconf_version)
 
 
 # Import module_utils notes....   These have to be top-level imports due to how ansiballz ships
@@ -24,8 +25,7 @@ from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import
 
 __metaclass__ = type
 
-
-ksconf_min_version = (0, 9)
+ksconf_min_version = (0, 11)
 ksconf_min_version_text = ".".join("{}".format(i) for i in ksconf_min_version)
 
 
@@ -212,88 +212,51 @@ uid:
 """
 
 
-class UnarchiveError(Exception):
-    pass
-
-
-def calc_missing_parent_dirs(paths):
-    """
-    Given a sequence of paths, return a list of unique parent directories and
-    files in tree creation order.
-    """
-    known_dirs = set()
-    files_and_dirs = []
-
-    for path in paths:
-        parent = os.path.dirname(path)
-        new_parents = []
-        while parent not in ("", "/"):
-            if parent in known_dirs:
-                break
-            else:
-                new_parents.insert(0, parent)
-                parent = os.path.dirname(parent)
-        if new_parents:
-            known_dirs.update(new_parents)
-            files_and_dirs.extend(new_parents)
-        files_and_dirs.append(path)
-    return files_and_dirs
-
-
-# Informative stanza, attributes combos from app.conf
-APP_ATTRIBUTES = [
-    ("ui", "label"),
-    ("launcher", "author"),
-    ("launcher", "version"),
-]
-
-
 def ksconf_sideload_app(src, dest, src_orig=None):
-    from ksconf.archive import extract_archive, sanity_checker
-    from ksconf.util.file import dir_exists
+    from ksconf import __version__ as ksconf_version
+    from ksconf.app import get_facts_manifest_from_archive
+    from ksconf.app.deploy import expand_archive_by_manifest
 
-    app_names, app_conf, extras = get_app_info_from_spl(src, calc_hash=True)
-    if len(app_names) > 1:
-        raise UnarchiveError("This module only supports extracting a single splunk app.  "
-                             "Found {} apps named:  {}".format(len(app_names),
-                                                               ", ".join(app_names)))
-    app_name = app_names.pop()
-    del app_names
+    src = Path(src)
+    dest = Path(dest)
+
+    app_facts, app_manifest = get_facts_manifest_from_archive(src, calculate_hash=True,
+                                                              check_paths=True)
+
+    # Correct 'source' field to match the filename on the controller node
+    app_manifest.source = src_orig or os.fspath(src)
 
     result = {
+        # For legacy reasons, we are keeping "app_info" (may drop this in favor of app_conf below)
         "app_info": {
-            "name": app_name},
+            "name": app_facts.name,
+            "author": app_facts.author,
+            "version": app_facts.version,
+            "deprecated": "NOTE 'app_info' is going away, use 'app_facts' instead!",
+        },
+        # This is the new output that should be used
+        "app_facts": app_facts.to_tiny_dict("name", "author", "version"),
     }
-    hash_sig = result["hash"] = extras.pop("hash")
-    # Preserve this?
-    if extras:
-        result["app_info"]["extras"] = extras
-    for stanza, attribute in APP_ATTRIBUTES:
-        value = app_conf.get(stanza, {}).get(attribute)
-        result["app_info"][attribute] = value
 
-    files = extract_archive(src)
-    files = sanity_checker(files)    # Check for bad paths (absolute, or relative with "..")
-    file_list = []
-    # gen_arch_file_remapper -- Optionally add this one if we need to remap output destination
-    for f in files:
-        full_path = os.path.join(dest, f.path)
-        dir_exists(os.path.dirname(full_path))
-        with open(full_path, "wb") as fp:
-            fp.write(f.payload)
-        os.chmod(full_path, f.mode)
-        file_list.append(f.path)
+    # Do the extraction (stupid version) -- no new SMART functionality yet
+    expand_archive_by_manifest(src, dest, app_manifest)
 
-    state_file = os.path.join(app_name, SIDELOAD_STATE_FILE)
-    with open(os.path.join(dest, state_file), "w") as marker_f:
+    # Create state file
+    state_file = dest / app_manifest.name / SIDELOAD_STATE_FILE
+
+    with open(state_file, "w") as marker_f:
         data = {
             "src_path": src_orig or src,
-            "src_hash": hash_sig,
+            "src_hash": app_manifest.hash,
             "ansible_module_version": collection_version,
+            "ksconf_version": ksconf_version,
             "installed_at": time.time(),
+            "manifest": app_manifest.to_dict(),
         }
-        json.dump(data, marker_f)
-    file_list.append(state_file)
+        json.dump(data, marker_f, indent=1)
+
+    file_list = [os.fspath(f.path) for f in app_manifest.files]
+    file_list.append(os.fspath(state_file))
 
     # Hard code this for now!
     result["changed"] = True
@@ -306,6 +269,7 @@ def main():
             src=dict(type='path', required=True),
             src_orig=dict(type="path", required=False),  # Internal (added by action)
             dest=dict(type='path', required=True),
+            # show_manifest=dict(type=bool, default=False, alias="list_files")
             list_files=dict(type='bool', default=False)
         ),
         add_file_common_args=True,
@@ -346,9 +310,6 @@ def main():
         module.exit_json(msg="Check mode unsupported....  Please finish the implementation!")
 
     res_args, files = ksconf_sideload_app(src, dest, src_orig=src_orig)
-
-    # Hack: Inject parent directories into the list too (since directories are technically skipped)
-    files = calc_missing_parent_dirs(files)
 
     if res_args.get('diff', True) and not module.check_mode:
         # do we need to change perms?

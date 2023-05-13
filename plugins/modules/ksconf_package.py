@@ -6,11 +6,12 @@ from __future__ import absolute_import, division, print_function
 import datetime
 import os
 import re
+from pathlib import Path
 
 from ansible.module_utils._text import to_text
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
-    check_ksconf_version, gzip_content_hash)
+from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import \
+    check_ksconf_version
 
 
 __metaclass__ = type
@@ -249,20 +250,16 @@ def main():
         ret["context"] = params["context"]
 
     ksconf_version = check_ksconf_version(module)
-    if ksconf_version < (0, 8, 4):
-        module.fail_json(msg="ksconf version>=0.8.4 is required.  Found {}".format(ksconf_version))
-    if ksconf_version < (0, 9, 1):
-        module.warn("ksconf version>=0.9.1 is required to support idempotent behavior.")
+    if ksconf_version < (0, 11):
+        module.fail_json(msg="ksconf version>=0.11.0 is required.  Found {}".format(ksconf_version))
 
     # Import the ksconf bits we need
+    from ksconf.app.manifest import create_manifest_from_archive, load_manifest_for_archive
     from ksconf.package import AppPackager
 
     if not os.path.isdir(source):
         module.fail_json(msg="The source '{}' is not a directory or is not "
                          "accessible.".format(source))
-
-    # if (splunk_user or splunk_pass) and not (splunk_user and splunk_pass):
-    #    module.fail_json(msg="Both 'username' and 'password' must be specified at the same time.")
 
     '''
     if creates:
@@ -295,7 +292,7 @@ def main():
 
     # Just call combine (writing to a temporary directory) and the tar it up.
     # At some point this should all be done in memory, as this would allow for quicker
-    # detection/reporting of changes to support idepotent behavior more efficiently.
+    # detection/reporting of changes to support idempotent behavior more efficiently.
 
     app_name_source = "set via 'app_name'"
     if not app_name:
@@ -344,20 +341,43 @@ def main():
         # Should we default 'dest' if no value is given???? -- this seems problematic (at least we need to be more specific, like include a hash of all found layers??)
         dest = dest_file or "{}-{{{{version}}}}.tgz".format(archive_base)
 
-        # Build hash of any existing 'dest' file to allow for idempotent operation
-        existing_hash = gzip_content_hash(packager.expand_var(dest))
+        # Check manifest of existing 'dest' archive to enable idempotent operation
+        archive_path = Path(packager.expand_var(dest))
 
         # TODO:  Ensure that creation of dest is not interrupted (either in ksconf level or here)
-        #        Incomplete output files should never end up in dest.  (temp file rename pattern?)
-        archive_path = packager.make_archive(dest)
-        size = os.stat(archive_path).st_size
-        log_stream.write(to_text("Archive created:  file={} size={:.2f}Kb\n".format(
-            os.path.basename(archive_path), size / 1024.0)))
+        #        Incomplete output files should never end up in dest.  (temp file rename pattern?
 
+        new_manifest = packager.make_manifest(calculate_hash=True)
+        existing_manifest = None
+
+        # Make this idempotent by checking for the output tarball, and determining if the app content changed
+        if archive_path.is_file():
+            existing_manifest = load_manifest_for_archive(archive_path)
+            if existing_manifest.hash == new_manifest.hash:
+                resulting_action = "skipped"
+            else:
+                resulting_action = "updated"
+        else:
+            resulting_action = "created"
+
+        if resulting_action != "skipped":
+            archive_path2 = packager.make_archive(dest)
+            # Assuming this is true, we can just discard the output of .make_archive()
+            assert str(archive_path) == archive_path2
+            create_manifest_from_archive(archive_path, None, manifest=new_manifest)
+
+        size = archive_path.stat().st_size
+        log_stream.write(f"Archive {resulting_action}:  "
+                         f"file={archive_path.name} "
+                         f"size={size / 1024.0:.2f}Kb\n")
+
+        ret["action"] = resulting_action
         # Should this be expanded to be an absolute path?
-        ret["archive"] = archive_path
+        ret["archive"] = os.fspath(archive_path)
         ret["app_name"] = packager.app_name
         ret["archive_size"] = size
+
+        # TODO: Return DELTA, this is basically done and ready.  See DeploySequence.from_manifest_transformation(old, new)
 
         # TODO: Return the layer names used.  Currently hidden behind AppPackager's internal call to "combine"
         # ret["layers"] = list(...)
@@ -370,12 +390,10 @@ def main():
     ret["delta"] = to_text(delta)
     ret["stdout"] = to_text(log_stream.getvalue())
 
-    # Inefficient idempotent implementation; but it works with ksconf 0.9.1
-    new_hash = gzip_content_hash(ret["archive"])
-    ret["changed"] = new_hash != existing_hash
+    ret["changed"] = resulting_action != "skipped"
 
-    ret["new_hash"] = new_hash
-    ret["old_hash"] = existing_hash
+    ret["new_hash"] = new_manifest.hash
+    ret["old_hash"] = existing_manifest.hash if existing_manifest else ""
 
     # Fixup the 'layers' output (invocation/module_args/layers); drop empty
     params["layers"] = {mode: pattern for layer in layers

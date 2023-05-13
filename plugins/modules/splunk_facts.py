@@ -4,12 +4,14 @@
 from __future__ import absolute_import, division, print_function
 
 import hashlib
+import json
 import os
 import re
+from pathlib import Path
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (find_splunk_home,
-                                                                                  get_app_facts)
+from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
+    SIDELOAD_STATE_FILE, find_splunk_home)
 
 
 __metaclass__ = type
@@ -137,7 +139,7 @@ class SplunkMetadata(object):
             if not splunk_home:
                 self.fail("Couldn't locate SPLUNK_HOME.")
                 return
-        self.splunk_home = splunk_home
+        self.splunk_home = Path(splunk_home)
         self._fail = False
         self._error = None
         self._data = {}
@@ -149,7 +151,7 @@ class SplunkMetadata(object):
         if ksconf_level != "skip":
             self.fetch_ksconf_version(ksconf_level)
         for app_dir in app_dirs:
-            self.fetch_app_info(app_dir)
+            self.fetch_app_info(Path(app_dir))
 
     def error(self, msg):
         self._error = msg
@@ -159,7 +161,7 @@ class SplunkMetadata(object):
         self._fail = True
 
     def fetch_version(self):
-        splunk_version = os.path.join(self.splunk_home, SPLUNK_VERSION)
+        splunk_version = self.splunk_home / SPLUNK_VERSION
         sv = {}
         try:
             for line in open(splunk_version):
@@ -176,16 +178,16 @@ class SplunkMetadata(object):
         #           btool distsearch list tokenExchKeys
         #       and then parse for "certDir" and "publicKey" values.
         #       But we're just starting with the static default path.
-        pub_key_path = os.path.join(self.splunk_home, SPLUNK_DIST_SEARCH_PUB_KEY)
+        pub_key_path: Path = self.splunk_home / SPLUNK_DIST_SEARCH_PUB_KEY
         try:
-            pub_key = open(pub_key_path).read()
+            pub_key = pub_key_path.read_text()
             self._data["dist_search"] = dict(server_public_key=pub_key)
         except Exception:
             self.error("Unable to read distributed search public key: %s" % pub_key_path)
 
     def fetch_guid(self):
         # Only looking in the Splunk 6.x location (skipping server.conf)
-        cfg_file = os.path.join(self.splunk_home, SPLUNK_INSTANCE_CFG)
+        cfg_file = self.splunk_home / SPLUNK_INSTANCE_CFG
         try:
             for line in open(cfg_file):
                 mo = re.match(r"^guid\s*=\s*([A-Fa-f0-9-]+)\s*$", line)
@@ -196,12 +198,11 @@ class SplunkMetadata(object):
             self.error("Unable to read guid from file: %s" % cfg_file)
 
     def fetch_splunksecret(self):
-        fn = os.path.join(self.splunk_home, SPLUNK_AUTH_SECRET)
+        fn: Path = self.splunk_home / SPLUNK_AUTH_SECRET
         try:
             # Note could use module.sha1(filename) instead ....
             h = hashlib.new("sha256")
-            with open(fn, "rb") as f:
-                h.update(f.read())
+            h.update(fn.read_bytes())
             self._data["secret_hash"] = h.hexdigest()
         except Exception as e:
             self.error(f"Unable to read secret file: {fn}  Exception={e}")
@@ -219,6 +220,7 @@ class SplunkMetadata(object):
         except ImportError:
             self._data["ksconf"] = None
             self.error("Unable to locate ksconf python module")
+            return
 
         if level != "detail":
             return
@@ -246,43 +248,66 @@ class SplunkMetadata(object):
         except ImportError:
             self.error("Unable to report ksconf subcommands inventory")
 
-    def fetch_app_info(self, _app_root):
+    def fetch_app_info(self, app_root: Path, max_manifest_length=30):
         # Classic LIST of DICT question... not sure which is better
         app_facts = self._data.setdefault("apps", [])
-        app_root = _app_root
+        _app_root = app_root
 
-        if not os.path.isabs(app_root):
-            app_root = os.path.join(self.splunk_home, "etc", app_root)
+        # If a relative path is given, assume it's relative to $SPLUNK_HOME/etc
+        if not app_root.is_absolute():
+            app_root = Path(self.splunk_home) / "etc" / app_root
 
-        if not os.path.isdir(app_root):
-            self._data.setdefault("app_root_missing", []).append(app_root)
+        if not app_root.is_dir():
+            self._data.setdefault("app_root_missing", []).append(os.fspath(app_root))
             return
 
         for app_name in os.listdir(app_root):
-            app_path = os.path.join(app_root, app_name)
-            if not os.path.isdir(app_path):
+            app_path = app_root / app_name
+            if not app_path.is_dir():
                 continue
             info = {
                 "name": app_name,
-                "root": _app_root,
-                "path": app_path
+                "root": os.fspath(_app_root),
+                "path": os.fspath(app_path)
             }
 
-            collect_appconf = True
-            if self._data["ksconf"] is None:
-                collect_appconf = False
+            collect_appconf = self._data["ksconf"] is not None
+
             try:
-                d = get_app_facts(app_path, use_appconf=collect_appconf)
-                info.update(d)
+                if collect_appconf:
+                    from ksconf.app.facts import AppFacts
+                    af = AppFacts.from_app_dir(app_path)
+                    info["app_conf"] = af.to_tiny_dict("name", "author", "version")
+                    del af
+
+                if True:
+                    state_file = app_path / SIDELOAD_STATE_FILE
+                    if state_file.is_file():
+                        with open(state_file) as fp:
+                            data = json.load(fp)
+                        # XXX: Maybe filter / pre-process this info somehow (this could get very large
+                        #      once manifest is added)
+
+                        try:
+                            if len(data["manifest"]["files"]) > max_manifest_length:
+                                data["manifest"]["files"] = len(data["manifest"]["files"])
+                        except KeyError:
+                            pass
+                        except (ValueError, KeyError, TypeError) as e:
+                            data["a_thing_that_happened"] = str(e)
+
+                        info["sideload"] = data
+
             except ValueError as e:
-                info["error"] = f"{e}"
+                self.error(f"{e}")
+
             app_facts.append(info)
 
     def return_facts(self):
         if self._fail:
             return dict(failed=True, msg=self._error)
         sf = {}
-        sf[self._prefix % "home"] = self.splunk_home
+        sf[self._prefix % "home"] = os.fspath(self.splunk_home)
         for (key, value) in self._data.items():
             sf[self._prefix % key] = value
         if self._error:

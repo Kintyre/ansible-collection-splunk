@@ -34,6 +34,10 @@ localhost ansible_connection=local splunk_home=~/splunk
 ansible-galaxy collection install . --force
 
 
+
+
+
+
 export SPLUNK_HOME=~/splunk
 ansible -i inventory -m cdillc.splunk.splunk_cli -a "splunk_home={{splunk_home}} cmd=version" all
 ansible -i inventory -m cdillc.splunk.splunk_control -a "state=restarted username=admin password=PASSWORD timeout=20" all
@@ -49,3 +53,14 @@ ansible -m cdillc.splunk.ksconf_app_sideload -a "src=splunk-ta-aws-5.0.0-e3e6808
 
 ansible -m cdillc.splunk.splunk_facts splunk -i inventory -b --become-user splunk --become-password-file x
 ```
+
+
+
+Developer mode install:
+
+```bash
+mkdir -p ~/.ansible/collections/ansible_collections/cdillc
+ln -s $(pwd) ~/.ansible/collections/ansible_collections/cdillc/splunk
+```
+
+Possible alternative approach would be to use `ANSIBLE_COLLECTIONS_PATH`, but you have to have the parent directories setup correctly, so the above symlink seems to work well enough, but it of course impacts the version used by the entire user.

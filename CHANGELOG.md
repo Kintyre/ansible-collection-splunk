@@ -1,3 +1,9 @@
+## Release 0.18.0-beta1 (2023-05-13)
+
+* Working towards stateful app deployment.  This enabled the ability to remove files that are no longer shipped with the app.
+* Ksconf version 0.11.0 or later must be used.  Partial support for older versions was fully dropped (I'm not sure it ever was fully tested anyways).  Changes here were significant enough that being up-to-date is a must!
+* More embracement of pathlib and f-strings!  We *must* have Python 3.7 for ksconf on controller and target, so there's no value in half-supporting Python 2.7 anywhere in this codebase.
+
 ## Release 0.17.1 (2023-05-13)
 * Minor error handling improvements around json parsing.
 * Add support for app detection under `peer-apps` and `slave-apps`

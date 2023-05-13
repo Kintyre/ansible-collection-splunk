@@ -2,12 +2,13 @@
 #
 # ACTION:  (This runs on the controller!)
 #
+
 from __future__ import absolute_import, division, print_function
 
 import json
+from typing import Tuple
 
-from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
-    SIDELOAD_STATE_FILE, get_app_info_from_spl)
+from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import SIDELOAD_STATE_FILE
 
 
 __metaclass__ = type
@@ -16,11 +17,11 @@ import os
 from base64 import b64decode
 from tempfile import NamedTemporaryFile
 
-from ansible.errors import AnsibleAction, AnsibleActionFail, AnsibleActionSkip, AnsibleError
+from ansible.errors import AnsibleAction, AnsibleActionFail, AnsibleError
 from ansible.module_utils._text import to_text
-from ansible.module_utils.parsing.convert_bool import boolean
 from ansible.plugins.action import ActionBase
 from ansible.utils.display import Display
+from ksconf.app.manifest import AppArchiveContentError, AppManifest, load_manifest_for_archive
 
 
 display = Display()
@@ -38,7 +39,7 @@ class ActionModule(ActionBase):
         The remote json file must be copied to a temporary named file to be
         parsed locally.
         """
-        display.vvv(u"JSON state  file={0}".format(path))
+        display.vvv(u"JSON state file={0}".format(path))
         with NamedTemporaryFile("rb+") as temp_f:
             try:
                 self._connection.fetch_file(path, temp_f.name)
@@ -71,8 +72,30 @@ class ActionModule(ActionBase):
 
             temp_f.seek(0)
             data = json.load(temp_f)
-            display.vvv(u"JSON state  file={0} data={1!r}".format(path, data))
+
+            # Stupid dump of state data
+            d = data
+            if display.verbosity >= 3:
+                d = d.copy()
+                if "manifest" in data:
+                    d["manifest"] = d["manifest"].copy()
+                    d["manifest"]["files"] = f"Removing {len(data['manifest']['files'])} files ...."
+            display.vvv(f"JSON state file={path} data={d!r}")
+
             return data
+
+    def fetch_remote_manifest(self, state_file, task_vars) -> Tuple[AppManifest, dict]:
+        try:
+            data = self.parse_remote_json_file(state_file, task_vars)
+            if "manifest" not in data:
+                # Possible upgrade scenario.  Nothing we can do but fresh install
+                return None, data
+            # manifest_data = data.pop("manifest")
+            return AppManifest.from_dict(data.pop("manifest")), data
+        except json.decoder.JSONDecodeError as e:
+            display.warning(f"Remote JSON state file {state_file} is corrupt.  "
+                            f"App will be replaced.  {e}")
+            return None, None
 
     def run(self, tmp=None, task_vars=None):
         ''' handler for app side-load operation '''
@@ -88,8 +111,11 @@ class ActionModule(ActionBase):
         source = src = self._task.args.get('src', None)
         dest = self._task.args.get('dest', None)
         decrypt = self._task.args.get('decrypt', True)
+        list_files = self._task.args.get('list_files', False)
 
+        changed = True
         try:
+
             if source is None or dest is None:
                 raise AnsibleActionFail("src and dest are required")
 
@@ -107,37 +133,36 @@ class ActionModule(ActionBase):
             source = os.path.expanduser(source)
 
             try:
+                # DataLoader.get_real_file will simply decrypt a vault-protected file (So we could likely skip this)
                 source = self._loader.get_real_file(self._find_needle('files', source),
                                                     decrypt=decrypt)
             except AnsibleError as e:
                 raise AnsibleActionFail(to_text(e))
 
+            # Get hash of local archive.  This is cached between runs to reduce overhead.
             try:
-                app_names, _, extras = get_app_info_from_spl(source, calc_hash=True)
-                if len(app_names) != 1:
-                    raise AnsibleActionFail("Tarball must contain exactly one app.  "
-                                            "Found {0}:  {1}".format(len(app_names), app_names))
-                app_name = app_names.pop()
+                # This requires writing to the controller's filesystem along side `source`
+                app_manifest = load_manifest_for_archive(source)
+            except AppArchiveContentError as e:
+                raise AnsibleActionFail(f"Unable to process tarball {source} due to {e}")
 
-                # Load state file, if present
-                state_file = os.path.join(dest, app_name, SIDELOAD_STATE_FILE)
-                hash = extras["hash"]
-                try:
-                    state = self.parse_remote_json_file(state_file, task_vars)
-                    remote_hash = state.get("src_hash", None)
-                    if remote_hash:
-                        changed = hash != remote_hash
-                    else:
-                        changed = True
-                except json.decoder.JSONDecodeError as e:
-                    display.warning(u"Remote JSON state file {0} is corrupt.  "
-                                    "App will be replaced.  {1}".format(state_file, e))
-                    changed = True
-                except AnsibleError as e:
-                    # This shouldn't be possible any more....
-                    raise AnsibleActionFail(to_text(e))
+            try:
+                '''
+                extras = {
+                    "local_files": list(app_manifest.find_local()),
+                    "file_count": len(app_manifest.files),
+                }
+                '''
+                # Pull back remote sideload state data, if present
+                state_file = os.path.join(dest, app_manifest.name, SIDELOAD_STATE_FILE)
+                remote_manifest, remote_state = self.fetch_remote_manifest(state_file, task_vars)
+
+                if remote_manifest and app_manifest.hash == remote_manifest.hash:
+                    changed = False
+
             except AnsibleActionFail:
                 raise
+
             except Exception as e:
                 changed = True
                 display.v("Exception while trying to grab remote app deployment state.   "
@@ -171,11 +196,20 @@ class ActionModule(ActionBase):
                                                    module_args=new_module_args,
                                                    task_vars=task_vars))
             else:
-                # TODO:  If list_files is set, we could (eventually) capture that from the state file (not yet present)
+                # Simulate the output of the ksconf_app_sideload module
                 result["changed"] = False
-                result["hash"] = remote_hash
-                result["installed_at"] = state.get("installed_at", None)
-                result["app_info"] = {"name": app_name}
+                result["state_file"] = state_file
+                result["hash"] = remote_manifest.hash
+                result["installed_at"] = remote_state.get("installed_at", None)
+                result["app_info"] = {
+                    "name": remote_manifest.name,
+                    "deprecated": "NOTE 'app_info' is going away, use 'app_facts' instead!"}
+                result["app_facts"] = {"name": remote_manifest.name}
+
+                # Note that this version does NOT include directories.
+                # (Not sure why we care; I suppose we are trying to match the 'list_files' behavior of the builtin unarchive module.)
+                if list_files:
+                    result["files"] = [os.fspath(f.path) for f in remote_manifest.files]
 
         except AnsibleAction as e:
             result.update(e.result)
