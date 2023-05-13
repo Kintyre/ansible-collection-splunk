@@ -1,7 +1,9 @@
-## Release ()
-* Add stateful app deployment.  This enabled the ability to remove files that are no longer shipped with the app.
+## Release 0.17.1 (2023-05-13)
+* Minor error handling improvements around json parsing.
+* Add support for app detection under `peer-apps` and `slave-apps`
+* Additional app.conf field mappings
 
-## Release 0.17 (2023-03-23)
+## Release 0.17.0 (2023-03-23)
 * Add app tracking support in `splunk_facts` module.
 
 ## Release 0.16.2 (2023-02-28)
