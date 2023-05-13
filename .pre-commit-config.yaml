@@ -3,7 +3,7 @@ repos:
   - repo: https://github.com/ansible-community/ansible-lint.git
     rev: v6.12.2
     hooks:
-    # Note this is set with 'always_run' true; so our file/exclues mean nothing
+    # Note this is set with 'always_run' true; so our file/excludes mean nothing
       - id: ansible-lint
         # files: \.(yaml|yml)$
         # exclude: (github/workflows/|pre-commit-config)
@@ -12,7 +12,7 @@ repos:
     rev: v4.4.0
     hooks:
       - id: trailing-whitespace
-        exclude: (\.md|\.csv)$
+        exclude: (\.md|\.csv|.bumpversion\.cfg)$
       - id: end-of-file-fixer
         exclude: (\.md|\.csv|.bumpversion\.cfg)$
       - id: check-ast
