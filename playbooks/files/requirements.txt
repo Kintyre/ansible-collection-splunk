@@ -1,0 +1,5 @@
+pip
+wheel
+ksconf==0.11.2
+splunk-sdk>=1.7
+requests>=2.28

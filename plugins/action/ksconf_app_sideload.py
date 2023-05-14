@@ -119,16 +119,6 @@ class ActionModule(ActionBase):
             if source is None or dest is None:
                 raise AnsibleActionFail("src and dest are required")
 
-            '''
-            if creates:
-                # do not run the command if the line contains creates=filename
-                # and the filename already exists. This allows idempotence
-                # of command executions.
-                creates = self._remote_expand_user(creates)
-                if self._remote_file_exists(creates):
-                    raise AnsibleActionSkip("skipped, since %s exists" % creates)
-            '''
-
             dest = self._remote_expand_user(dest)
             source = os.path.expanduser(source)
 

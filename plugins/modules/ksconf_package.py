@@ -6,6 +6,7 @@ from __future__ import absolute_import, division, print_function
 import datetime
 import os
 import re
+from io import StringIO
 from pathlib import Path
 
 from ansible.module_utils._text import to_text
@@ -261,33 +262,8 @@ def main():
         module.fail_json(msg="The source '{}' is not a directory or is not "
                          "accessible.".format(source))
 
-    '''
-    if creates:
-        # do not run the command if the line contains creates=filename
-        # and the filename already exists.
-        v = os.path.expanduser(creates)
-        if os.path.exists(v):
-            module.exit_json(
-                cmd=args, changed=False, rc=0,
-                stdout="skipped, since %s exists" % v,
-                stderr=False
-            )
-
-    if removes:
-        # do not run the command if the line contains removes=filename
-        # and the filename does not exist.  This allows idempotence
-        # of command executions.
-        v = os.path.expanduser(removes)
-        if not os.path.exists(v):
-            module.exit_json(
-                cmd=args, changed=False, rc=0,
-                stdout="skipped, since %s does not exist" % v,
-                stderr=False
-            )
-    '''
     start_time = datetime.datetime.now()
 
-    from io import StringIO
     log_stream = StringIO()
 
     # Just call combine (writing to a temporary directory) and the tar it up.

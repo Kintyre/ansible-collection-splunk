@@ -1,3 +1,7 @@
+## Release 0.18.0-beta2 (2023-05-13)
+* Completed first pass at adding stateful deployment to `ksconf_app_sideload`
+
+
 ## Release 0.18.0-beta1 (2023-05-13)
 
 * Working towards stateful app deployment.  This enabled the ability to remove files that are no longer shipped with the app.

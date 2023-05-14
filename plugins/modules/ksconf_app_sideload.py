@@ -215,10 +215,18 @@ uid:
 def ksconf_sideload_app(src, dest, src_orig=None):
     from ksconf import __version__ as ksconf_version
     from ksconf.app import get_facts_manifest_from_archive
-    from ksconf.app.deploy import expand_archive_by_manifest
+    from ksconf.app.deploy import DeployActionType, DeployApply as DeployApplyBase, DeploySequence
+    from ksconf.app.manifest import AppManifest
 
     src = Path(src)
     dest = Path(dest)
+
+    class DeployApply(DeployApplyBase):
+        def resolve_source(self, source, hash):
+            # For right now, we only are dealing with a *single* app, so just always return 'src'
+            return src
+
+    deployer = DeployApply(dest)
 
     app_facts, app_manifest = get_facts_manifest_from_archive(src, calculate_hash=True,
                                                               check_paths=True)
@@ -238,11 +246,45 @@ def ksconf_sideload_app(src, dest, src_orig=None):
         "app_facts": app_facts.to_tiny_dict("name", "author", "version"),
     }
 
-    # Do the extraction (stupid version) -- no new SMART functionality yet
-    expand_archive_by_manifest(src, dest, app_manifest)
+    # state file
+    app_dir: Path = dest / app_manifest.name
+    state_file: Path = app_dir / SIDELOAD_STATE_FILE
 
-    # Create state file
-    state_file = dest / app_manifest.name / SIDELOAD_STATE_FILE
+    current_manifest = None
+    if app_dir.is_dir():
+        if state_file.is_file():
+            try:
+                data = json.loads(state_file.read_text())["manifest"]
+                current_manifest = AppManifest.from_dict(data)
+                del data
+                manifest_msg = "manifest for transformational upgrade"
+            except (IOError, KeyError, ValueError) as e:
+                manifest_msg = f"manifest unusable due to {type(e)}: {e}"
+        else:
+            manifest_msg = "manifest missing"
+    else:
+        manifest_msg = "newly created manifest file (fresh app install)"
+
+    if current_manifest is not None:
+        # current_manifest.hash
+        seq = DeploySequence.from_manifest_transformation(current_manifest, app_manifest)
+
+        # Need some kind of context manager here that (1) locks manifest file, (2) Puts an in-progress marker in the manifest file so that we know the state is corrupted / interrupted.
+        deployer.apply_sequence(seq)
+
+    result["manifest_msg"] = manifest_msg
+
+    # Don't rely on this to be stable.... more work to be done here.  Eventually want to report on what actually
+    # happened, not just the deployment plan (sequence)
+    result["files_changed"] = {}
+    result["file_change_counts"] = {}
+    for type_, actions in seq.actions_by_type.items():
+        type_ = str(type_)
+        result["file_change_counts"][type_] = actions
+        '''
+        if type_ in (DeployActionType.EXTRACT_FILE, DeployActionType.REMOVE_FILE):
+            result["files_changed"][type_] = [action.path for action in actions]
+        '''
 
     with open(state_file, "w") as marker_f:
         data = {

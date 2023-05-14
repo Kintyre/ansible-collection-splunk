@@ -20,6 +20,14 @@ Filters for the collection
 | ------ | ----------- |
 | `reltime_to_sec` | Convert a Splunk relative time string into seconds.  For example, in indexes.conf: `frozenTimePeriodInSecs = {{ "7d" \|  cdillc.splunk.reltime_to_sec }}`.  The suffixes `s`, `m`, `h`, `d`, `y` are supported. |
 
+
+## Playbooks
+
+# Install python dependencies:
+```bash
+ansible-playbook cdillc.splunk.install_dependencies
+```
+
 ## Testing
 
 Until we get automatic testing working, here are some commands to do testing
@@ -32,7 +40,6 @@ localhost ansible_connection=local splunk_home=~/splunk
 
 ```bash
 ansible-galaxy collection install . --force
-
 
 
 

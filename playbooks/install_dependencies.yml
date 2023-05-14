@@ -1,0 +1,25 @@
+---
+# Install runtime dependencies for cdillc.splunk
+
+- name: Install dependencies for controller
+  hosts: localhost
+  become: false
+  tasks:
+    - name: Install Python dependencies for the 'cdillc.splunk' collection
+      ansible.builtin.pip:
+        requirements: "{{ playbook_dir }}/files/requirements.txt"
+        extra_args: "--upgrade"
+
+
+- name: Install dependencies for splunk hosts
+  hosts: "{{ splunk_host | default('all') }}"
+  tasks:
+    - name: Copy requirements file
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/files/requirements.txt"
+        dest: "/tmp/cdillc-splunk-requirements.txt"
+
+    - name: Install Python dependencies for the 'cdillc.splunk' collection
+      ansible.builtin.pip:
+        requirements: /tmp/cdillc-splunk-requirements.txt
+        extra_args: "--upgrade"
