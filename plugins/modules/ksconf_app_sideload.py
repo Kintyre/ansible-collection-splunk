@@ -265,12 +265,10 @@ def ksconf_sideload_app(src, dest, src_orig=None):
     else:
         manifest_msg = "newly created manifest file (fresh app install)"
 
-    if current_manifest is not None:
-        # current_manifest.hash
-        seq = DeploySequence.from_manifest_transformation(current_manifest, app_manifest)
+    seq = DeploySequence.from_manifest_transformation(current_manifest, app_manifest)
 
-        # Need some kind of context manager here that (1) locks manifest file, (2) Puts an in-progress marker in the manifest file so that we know the state is corrupted / interrupted.
-        deployer.apply_sequence(seq)
+    # Need some kind of context manager here that (1) locks manifest file, (2) Puts an in-progress marker in the manifest file so that we know the state is corrupted / interrupted.
+    deployer.apply_sequence(seq)
 
     result["manifest_msg"] = manifest_msg
 
