@@ -8,7 +8,7 @@ namespace: cdillc
 name: splunk
 
 # The version of the collection. Must be compatible with semantic versioning
-version: "0.18.0-beta2"
+version: "0.18.0-beta3"
 
 # The path to the Markdown (.md) readme file. This path is relative to the root of the collection
 readme: README.md
