@@ -7,7 +7,8 @@ from __future__ import absolute_import, division, print_function
 import json
 import os
 import time
-from pathlib import Path
+from collections import defaultdict
+from pathlib import Path, PurePath
 
 from ansible.module_utils._text import to_bytes, to_native
 from ansible.module_utils.basic import AnsibleModule
@@ -212,6 +213,23 @@ uid:
 """
 
 
+def calc_missing_parent_dirs(paths):
+    """
+    Given a sequence of paths, return a list of unique parent directories and
+    files in tree creation order.
+    """
+    known_dirs = set()
+    for path in paths:
+        # Note:  Pretend like all paths are absolute, so that `.parent`
+        path = PurePath(path)
+        assert not path.is_absolute(), f"Path {path} is not a relative path!"
+        parent = path.parent
+        while parent not in known_dirs:
+            known_dirs.add(parent)
+            parent = parent.parent
+    return [os.fspath(p) for p in list(known_dirs) + paths]
+
+
 def ksconf_sideload_app(src, dest, src_orig=None):
     from ksconf import __version__ as ksconf_version
     from ksconf.app import get_facts_manifest_from_archive
@@ -258,8 +276,8 @@ def ksconf_sideload_app(src, dest, src_orig=None):
                 current_manifest = AppManifest.from_dict(data)
                 del data
                 manifest_msg = "manifest for transformational upgrade"
-            except (IOError, KeyError, ValueError) as e:
-                manifest_msg = f"manifest unusable due to {type(e)}: {e}"
+            except (OSError, KeyError, ValueError) as e:
+                manifest_msg = f"manifest unusable due to {type(e).__name__}: {e}"
         else:
             manifest_msg = "manifest missing"
     else:
@@ -274,15 +292,15 @@ def ksconf_sideload_app(src, dest, src_orig=None):
 
     # Don't rely on this to be stable.... more work to be done here.  Eventually want to report on what actually
     # happened, not just the deployment plan (sequence)
-    result["files_changed"] = {}
+    result["files_changed"] = defaultdict(list)
     result["file_change_counts"] = {}
     for type_, actions in seq.actions_by_type.items():
         type_ = str(type_)
         result["file_change_counts"][type_] = actions
-        '''
-        if type_ in (DeployActionType.EXTRACT_FILE, DeployActionType.REMOVE_FILE):
-            result["files_changed"][type_] = [action.path for action in actions]
-        '''
+
+    for action in seq.actions:
+        if action.action in (DeployActionType.EXTRACT_FILE, DeployActionType.REMOVE_FILE):
+            result["files_changed"][str(action.action)].append(os.fspath(action.path))
 
     with open(state_file, "w") as marker_f:
         data = {
@@ -295,12 +313,12 @@ def ksconf_sideload_app(src, dest, src_orig=None):
         }
         json.dump(data, marker_f, indent=1)
 
-    file_list = [os.fspath(f.path) for f in app_manifest.files]
-    file_list.append(os.fspath(state_file))
+    # Inventory paths are relative to the `dest` directory
+    file_list = [os.fspath(app_manifest.name / f.path) for f in app_manifest.files]
 
     # Hard code this for now!
     result["changed"] = True
-    return result, file_list
+    return result, file_list, os.fspath(state_file)
 
 
 def main():
@@ -349,26 +367,27 @@ def main():
     if module.check_mode:
         module.exit_json(msg="Check mode unsupported....  Please finish the implementation!")
 
-    res_args, files = ksconf_sideload_app(src, dest, src_orig=src_orig)
+    res_args, files, state_file = ksconf_sideload_app(src, dest, src_orig=src_orig)
 
     if res_args.get('diff', True) and not module.check_mode:
         # do we need to change perms?
         # Reset permissions on all files (mode,owner,group,attr,se*)
-        for filename in files:
+
+        # Note:  Inject parent directories into the list since directories aren't in the manifest
+        for filename in calc_missing_parent_dirs(files):
             file_args['path'] = os.path.join(b_dest, to_bytes(
                 filename, errors='surrogate_or_strict'))
             try:
                 res_args['changed'] = module.set_fs_attributes_if_different(
                     file_args, res_args['changed'], expand=False)
             except (IOError, OSError) as e:
-                module.fail_json(msg="Unexpected error when accessing file: %s"
-                                 % to_native(e), **res_args)
+                module.fail_json(msg=f"Unexpected error settings permissions for {filename}: {e}",
+                                 **res_args)
 
     if list_files:
-        # Copy to results; skip very last file (which is always the state file)
-        res_args["files"] = files[:-1]
+        res_args["files"] = files
 
-    res_args["state_file"] = files[-1]
+    res_args["state_file"] = state_file
     # DEBUG
     # res_args['check_results'] = check_results
 
