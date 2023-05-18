@@ -40,7 +40,7 @@ description:
      - By default, it will copy the source file from the local system to the target before unpacking.
      - For Windows targets, switch to Linux.
 requirements:
-  - ksconf>={}
+  - ksconf>=0.11
 
 options:
   src:
@@ -115,7 +115,7 @@ notes:
       If this cause an issue for you, open a bug report and describe your use case.
 #    - Existing files/directories in the destination which are not in the archive
 #      are not touched. This is the same behavior as a normal archive extraction.
-'''.format(ksconf_min_version_text)
+'''
 
 
 """
