@@ -29,16 +29,18 @@ description:
 version_added: "0.10.0"
 author: Lowell C. Alleman (@lowell80)
 requirements:
-  - ksconf>=0.9.1
+    - ksconf>=0.11.3
+
+extends_documentation_fragment: action_common_attributes
+
 attributes:
-# TODO --
-#    check_mode:
-#        support: full
-#    diff_mode:
-#       support: none
+    check_mode:
+        support: none
+    diff_mode:
+        support: none
     platform:
-      support: full
-      platforms: posix
+        support: full
+        platforms: posix
 
 options:
     source:
@@ -68,9 +70,9 @@ options:
 
     layers:
         description:
-          - Include and exclude rules regarding which layers to include in the generated app.
-          - Layer filters rules are evaluated sequentially, and the last match wins.
-          - List of dictionaries with a single key, either I(include) or I(exclude)
+            - Include and exclude rules regarding which layers to include in the generated app.
+            - Layer filters rules are evaluated sequentially, and the last match wins.
+            - List of dictionaries with a single key, either I(include) or I(exclude)
         type: list
         elements: dict
         default: []
@@ -84,10 +86,10 @@ options:
 
     local:
         description:
-          - Define handling of of C(local) directory and C(local.meta) file.
-          - Use I(preserve) to keep the local artifacts as-is.
-          - I(block) will exclude local artifacts from the generated app archive.
-          - I(promote) will merge any local artifacts into the default layer.
+            - Define handling of of C(local) directory and C(local.meta) file.
+            - Use I(preserve) to keep the local artifacts as-is.
+            - I(block) will exclude local artifacts from the generated app archive.
+            - I(promote) will merge any local artifacts into the default layer.
         choices: ["preserve", "block", "promote"]
         type: str
         default: preserve
@@ -101,10 +103,10 @@ options:
 
     app_name:
         description:
-          - Specify the top-level folder (app) name.
-          - If this is not given, the app folder name is automatically extracted
-            from the basename of C(source).
-          - Placeholder variables, such as ``{{app_id}}`` can be used here.
+            - Specify the top-level folder (app) name.
+            - If this is not given, the app folder name is automatically extracted
+              from the basename of C(source).
+            - Placeholder variables, such as C({{app_id}}) can be used here.
         type: str
 
     context:
@@ -118,15 +120,15 @@ options:
 # set_build
 
 notes:
-  - Several arguments accept ksconf variables.  Traditionally these are written in a Jinja-2 like
-    syntax, which is familiar, but leads to some confusion when embedded in an Ansible playbook.
-    To avoid Jinja escaping these variables manually, this modules supports I([[var]]) syntax too.
-    If the path includes I([[version]]) that will be translated to I({{version}}) before be
-    handed to the ksconf tool.
+    - Several arguments accept ksconf variables.  Traditionally these are written in a Jinja-2 like
+      syntax, which is familiar, but leads to some confusion when embedded in an Ansible playbook.
+      To avoid Jinja escaping these variables manually, this modules supports C([[var]]) syntax too.
+      If the path includes C([[version]]) that will be translated to C({{version}}) before be
+      handed to the ksconf tool.
 '''
 
 
-RETURN_ = r'''
+RETURN = '''
 app_name:
     description: >
         Final name of the splunk app, which is the top-level directory
@@ -173,20 +175,44 @@ context:
 '''
 
 
-EXAMPLES_ = r'''
+EXAMPLES = r'''
 
 - name: Build addon using a specific set of layers
   cdillc.splunk.ksconf_package:
-    source: "{{app_repo}}/Splunk_TA_nix"
-    file: "{{install_root}}/build/Splunk_TA_nix.spl"
-    block: [*.sample]
+    source: "{{ app_repo }}/Splunk_TA_nix"
+    file: "{{ install_root }}/build/Splunk_TA_nix.spl"
+    block: ["*.sample"]
     local: preserve
     follow_symlink: false
     layers:
-        - exclude: 30-*
-        - include: 30-{{role}}
-        - exclude: 40-*
-        - include: 40-{{env}}
+        - exclude: "30-*"
+        - include: "30-{{role}}"
+        - exclude: "40-*"
+        - include: "40-{{env}}"
+
+# More complex example that loops over an 'apps_inventory' list that contains both
+# local directories and pre-packaged tarballs (which don't need to be re-packaged)
+- name: Render apps from version control
+    cdillc.splunk.ksconf_package:
+    source: "{{ rendered_apps_folder }}/{{ item.name }}"
+    file: "{{ tarred_apps_folder }}/{{ item.name }}-[[ layers_hash ]].tgz"
+    local: preserve
+    layers:
+        - include: "10-upstream"
+        - include: "20-common"
+        - include: "30-{{ app_role }}"
+        - include: "40-{{ layer_env }}"
+        - include: "50-{{ app_role }}-{{ layer_env }}"
+        - include: "60-{{ org }}"
+    delegate_to: localhost
+    run_once: true
+    loop: >
+      {{ apps_inventory
+      | selectattr("state", "eq", "present")
+      | rejectattr("tarball")
+      }}
+    register: app_render_output
+    tags: render
 '''
 
 

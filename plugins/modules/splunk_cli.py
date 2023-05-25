@@ -43,6 +43,11 @@ description:
       I(password) options.
 version_added: "0.9.0"
 author: Lowell C. Alleman (@lowell80)
+
+extends_documentation_fragment:
+    - action_common_attributes
+    - action_common_attributes.raw
+
 attributes:
     check_mode:
         details: while the command itself is arbitrary and cannot be subject to
@@ -56,6 +61,7 @@ attributes:
       platforms: posix
     raw:
       support: full
+
 options:
     splunkd_uri:
         description:

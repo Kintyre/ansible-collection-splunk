@@ -50,7 +50,7 @@ dependencies: {}
 repository: https://github.com/Kintyre/ansible-collection-splunk
 
 # The URL to any online docs
-documentation: ""
+documentation: https://cdillc-splunk.readthedocs.io/en/latest/collections/cdillc/splunk/#plugin-index
 
 # The URL to the homepage of the collection/project
 homepage: https://github.com/Kintyre/ansible-collection-splunk/issues

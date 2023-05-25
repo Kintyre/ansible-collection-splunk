@@ -23,6 +23,14 @@ module: splunk_facts
 short_description: Gathers facts about a Splunk installation
 version_added: "0.10.0"
 author: Lowell C. Alleman (@lowell80)
+
+extends_documentation_fragment:
+    - action_common_attributes.facts
+
+attributes:
+    facts:
+        support: full
+
 options:
     splunk_home:
         description:

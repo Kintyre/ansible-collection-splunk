@@ -23,9 +23,5 @@ antsibull-docs \
 rsync -cprv --delete-after temp-rst/collections/ rst/collections/
 
 # Build Sphinx site
-
-# Only build locally; but don't run if thye are in read-the-docs
-if [[ -z $READTHEDOCS_PROJECT ]]
-then
-    sphinx-build -M html rst build -c . -W --keep-going
-fi
+cp -a index.rst rst/index.rst
+sphinx-build -M html rst build -c . -W --keep-going

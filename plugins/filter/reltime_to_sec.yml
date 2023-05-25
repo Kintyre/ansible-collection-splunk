@@ -1,0 +1,28 @@
+DOCUMENTATION:
+  name: reltime_to_sec
+  version_added: "0.16"
+  short_description: convert a relative time expression into a number of seconds
+  description:
+    - Convert a human friendly time span as an number of seconds (integer)
+  notes:
+    - Only a subset of Splunk's relative time syntax is supported.
+    - Many simple expressions like C(7d) 7 days, and C(5m) 5 mins, should just work.
+
+  options:
+    _input:
+      description:
+        - Relative time expression
+        - "Supported suffixes include: C(y) years, C(mon) months, C(w) weeks, C(d) days, C(h) hours, C(m) minutes, and (s) seconds."
+      type: str
+      required: true
+
+EXAMPLES: |
+
+  # Generate indexes.conf
+  frozenTimePeriodInSecs = {{ "7d" | cdillc.splunk.reltime_to_sec }}
+
+
+RETURN:
+  _value:
+    description: Number of seconds represented by the given relative-time expression
+    type: int

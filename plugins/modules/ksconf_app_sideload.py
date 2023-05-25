@@ -33,7 +33,7 @@ ksconf_min_version_text = ".".join("{}".format(i) for i in ksconf_min_version)
 DOCUMENTATION = r'''
 ---
 module: ksconf_app_sideload
-short_description: Unpacks a Splunk app archive after copying it from the local machine
+short_description: Unpacks a Splunk app archive after copying it from the controller machine
 version_added: '0.10.0'
 author: Lowell C. Alleman (@lowell80)
 description:
@@ -57,8 +57,8 @@ options:
   io_buffer_size:
     description:
       - Size of the volatile memory buffer that is used for extracting files from the archive in bytes.
-    type: int
-    default: 64 KiB
+    type: bytes
+    default: 65536
   list_files:
     description:
       - If set to True, return the list of files that are contained in the tarball.
@@ -84,11 +84,11 @@ options:
 #    version_added: "2.11"
 
 extends_documentation_fragment:
-- action_common_attributes
-- action_common_attributes.flow
-- action_common_attributes.files
-- decrypt
-- files
+    - action_common_attributes
+    - action_common_attributes.flow
+    - action_common_attributes.files
+    - decrypt
+    - files
 attributes:
     action:
       support: full
@@ -107,44 +107,57 @@ attributes:
       support: none
     vault:
       support: full
+
 notes:
     - Requires ksconf package on controller and target host.
     - Can handle I(.tgz), I(.tar.gz), I(.spl), and I(.zip) files.
+    - Existing files/directories in the destination which are not in the archive
+      are removed.  This requires that the prior app installation include a manifest.
+      This feature was added in v0.18 of this collection; and all hash calculations have changed.
     - Note that only B(files) are extracted.
       This means empty directories will not be created.
       If this cause an issue for you, open a bug report and describe your use case.
-#    - Existing files/directories in the destination which are not in the archive
-#      are not touched. This is the same behavior as a normal archive extraction.
+    - Too speed up subsequent calls to I(ksconf_app_sideload), manifest files are created and cached
+      on the controller node (this live in the directory as I(src)).
+      This reduces the controller's processing overhead.
+      For this speedup to work, the controller must have write access to the
+      parent directory of I(src).
+      Also, any tarball created with I(ksconf_package) will already have this manifest file.
 '''
 
 
-"""
 EXAMPLES = r'''
-- name: Extract foo.tgz into /var/lib/foo
-  ansible.builtin.unarchive:
-    src: foo.tgz
-    dest: /var/lib/foo
+- name: Extract ta-nix.tgz into /opt/splunk/etc/apps
+  cdillc.splunk.ksconf_app_sideload:
+    src: ta-nix.tgz
+    dest: /opt/splunk/etc/apps
 
-- name: Unarchive a file that is already on the remote machine
-  ansible.builtin.unarchive:
-    src: /tmp/foo.zip
-    dest: /usr/local/bin
-    remote_src: yes
-
-- name: Unarchive a file that needs to be downloaded (added in 2.0)
-  ansible.builtin.unarchive:
-    src: https://example.com/example.zip
-    dest: /usr/local/bin
-    remote_src: yes
-
-- name: Unarchive a file with extra options
-  ansible.builtin.unarchive:
-    src: /tmp/foo.zip
-    dest: /usr/local/bin
-    extra_opts:
-    - --transform
-    - s/^xxx/yyy/
+- name: Install rendered apps from version control & existing tarballs
+    cdillc.splunk.ksconf_app_sideload:
+      # Add prefix for archived apps
+      src: "{{ apps_folder }}/{{ item }}"
+      dest: "{{ splunk_home }}/etc/deployment-apps"
+      owner: "{{ splunk_nix_user }}"
+      group: "{{ splunk_nix_group }}"
+    # Loop over present + managed apps created from (1) ksconf_package and (2) existing tarballs
+    loop: >
+      {{ app_render_output.results
+        | selectattr("archive")
+        | selectattr("item.state", "eq", "present")
+        | selectattr("item.managed")
+        | map(attribute="archive")
+        + apps_inventory
+        | selectattr("tarball")
+        | selectattr("state", "eq", "present")
+        | selectattr("managed")
+        | map(attribute="tarball")
+      }}
+    become: true
+    become_user: "{{ splunk_nix_user }}"
+    notify: "reload deployment-server"
+    tags: install'
 '''
+
 
 RETURN = r'''
 dest:
@@ -167,11 +180,6 @@ group:
   returned: always
   type: str
   sample: "librarians"
-handler:
-  description: Archive software handler used to extract and decompress the archive.
-  returned: always
-  type: str
-  sample: "TgzArchive"
 mode:
   description: String that represents the octal permissions of the destination directory.
   returned: always
@@ -182,15 +190,10 @@ owner:
   returned: always
   type: str
   sample: "paul"
-size:
-  description: The size of destination directory in bytes. Does not include the size of files or subdirectories contained within.
-  returned: always
-  type: int
-  sample: 36
 src:
   description:
     - The source archive's path.
-    - If I(src) was a remote web URL, or location local to the ansible controller.
+    - The location is local to the ansible controller.
   returned: always
   type: str
   sample: "/home/paul/test.tar.gz"
@@ -200,7 +203,7 @@ state:
   type: str
   sample: "directory"
 state_file:
-  description: Relative path to the json state tracking file where installation state and source hash information is stored.
+  description: Relative path to the json state tracking file where installation state, source hash, and application manifest is stored.
   returned: always
   type: str
   sample: fire_brigade/.ksconf_sideload.json
@@ -210,7 +213,6 @@ uid:
   type: int
   sample: 1000
 '''
-"""
 
 
 def calc_missing_parent_dirs(paths):
