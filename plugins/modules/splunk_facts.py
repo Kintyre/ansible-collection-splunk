@@ -46,7 +46,7 @@ options:
             - Use I(skip) to disable all ksconf related facts,
               I(short) to collect basic information,
               and I(detail) to show information about the available subcommands.
-        choices: ["preserve", "block", "promote"]
+        choices: ["skip", "short", "detail"]
         type: str
         required: false
         default: short
@@ -57,7 +57,7 @@ options:
         type: list
         required: false
         elements: str
-        default: [apps, deployment-apps, shcluster/apps, manager-apps, master-apps]
+        default: [apps, deployment-apps, shcluster/apps, manager-apps, peer-apps, master-apps, slave-apps]
 
 description:
     - This module collects various pieces of data about a Splunk installation.
@@ -74,51 +74,55 @@ Typical use:
 
 Or specify a custom Splunk install home
 - splunk_facts: splunk_home=/opt/acmeco/splunk
+
+Splunk facts for app hosted in a git repository:
+- splunk_facts: app_dirs=/opt/git-repo/apps
 '''
 
-'''
-Notes about output layout:
 
-    ansible_splunk_version
-      version
-      build
-      product
-      platform
-    ansible_splunk_dist_search
-      server_public_key
-    ansible_splunk_config
-      <config>
-        <stanza>
-          <key>
-    ansible_splunk_ksconf
-      version
-      vcs_info
-      build
-      package
-      path
-      commands
-        <name>
-          class
-          distro
-          error
-    ansible_splunk_apps:
-        name
-        root
-        path
-        app_conf
-            version
-            author
-            description
-            state
-            build
-            check_for_updates
-            label
-            is_visible
-        sideload
-            ansible_module_version
-            installed_at
-            src_hash
-            src_path
+RETURN = r'''
+# Return output looks something like the following:
+
+#    ansible_splunk_version
+#      version
+#      build
+#      product
+#      platform
+#    ansible_splunk_dist_search
+#      server_public_key
+#    ansible_splunk_config
+#      <config>
+#        <stanza>
+#          <key>
+#    ansible_splunk_ksconf
+#      version
+#      vcs_info
+#      build
+#      package
+#      path
+#      commands
+#        <name>
+#          class
+#          distro
+#          error
+#    ansible_splunk_apps:
+#        name
+#        root
+#        path
+#        app_conf
+#            version
+#            author
+#            description
+#            state
+#            build
+#            check_for_updates
+#            label
+#            is_visible
+#        sideload
+#            ansible_module_version
+#            installed_at
+#            src_hash
+#            src_path
 '''
 
 
@@ -293,9 +297,6 @@ class SplunkMetadata(object):
                     if state_file.is_file():
                         with open(state_file) as fp:
                             data = json.load(fp)
-                        # XXX: Maybe filter / pre-process this info somehow (this could get very large
-                        #      once manifest is added)
-
                         try:
                             if len(data["manifest"]["files"]) > max_manifest_length:
                                 data["manifest"]["files"] = len(data["manifest"]["files"])
