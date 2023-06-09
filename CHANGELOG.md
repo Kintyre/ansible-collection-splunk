@@ -1,9 +1,12 @@
+## Release 0.18.0 (2023-06-08)
+* First version of stateful deployment ready for wider use.
+* NOTICE: Ksconf version 0.11.0 or later must be used. 
+* Add read-the-docs docs support and various docs fixups.  See:  https://cdillc-splunk.readthedocs.io/
+
 ## Release 0.18.0-beta2 (2023-05-13)
 * Completed first pass at adding stateful deployment to `ksconf_app_sideload`
 
-
 ## Release 0.18.0-beta1 (2023-05-13)
-
 * Working towards stateful app deployment.  This enabled the ability to remove files that are no longer shipped with the app.
 * Ksconf version 0.11.0 or later must be used.  Partial support for older versions was fully dropped (I'm not sure it ever was fully tested anyways).  Changes here were significant enough that being up-to-date is a must!
 * More embracement of pathlib and f-strings!  We *must* have Python 3.7 for ksconf on controller and target, so there's no value in half-supporting Python 2.7 anywhere in this codebase.
@@ -24,7 +27,6 @@
 * Minor improvements to `reltime_to_sec` to support weeks, months, and years & add to main README.
 
 ## Release 0.16.0 (2023-02-27)
-
 * Add `reltime_to_sec` filter that will convert human a subset of Splunk's readable "relative time" format to seconds.
   For example `{{reltime_to_sec("7d")}}` will return `604800`
 * Minor doc/example improvements
