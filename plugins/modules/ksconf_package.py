@@ -193,7 +193,7 @@ EXAMPLES = r'''
 # More complex example that loops over an 'apps_inventory' list that contains both
 # local directories and pre-packaged tarballs (which don't need to be re-packaged)
 - name: Render apps from version control
-    cdillc.splunk.ksconf_package:
+  cdillc.splunk.ksconf_package:
     source: "{{ rendered_apps_folder }}/{{ item.name }}"
     file: "{{ tarred_apps_folder }}/{{ item.name }}-[[ layers_hash ]].tgz"
     local: preserve
@@ -204,15 +204,15 @@ EXAMPLES = r'''
         - include: "40-{{ layer_env }}"
         - include: "50-{{ app_role }}-{{ layer_env }}"
         - include: "60-{{ org }}"
-    delegate_to: localhost
-    run_once: true
-    loop: >
-      {{ apps_inventory
-      | selectattr("state", "eq", "present")
-      | rejectattr("tarball")
-      }}
-    register: app_render_output
-    tags: render
+  delegate_to: localhost
+  run_once: true
+  loop: >
+    {{ apps_inventory
+    | selectattr("state", "eq", "present")
+    | rejectattr("tarball")
+    }}
+  register: app_render_output
+  tags: render
 '''
 
 
