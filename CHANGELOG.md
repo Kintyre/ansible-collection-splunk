@@ -1,3 +1,6 @@
+## Release 0.18.1 (2023-06-08)
+* NO changes.  Re-uploading the same codebase to workaround issue with Ansible Galaxy where it apparently gets confused about beta releases.
+
 ## Release 0.18.0 (2023-06-08)
 * First version of stateful deployment ready for wider use.
 * NOTICE: Ksconf version 0.11.0 or later must be used. 
