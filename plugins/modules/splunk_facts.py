@@ -64,7 +64,6 @@ description:
     - Splunk apps data collection.
 notes:
     - Parameters to enable/disable various config or run-time stats may be added later.
-
 '''
 
 EXAMPLES = '''
@@ -79,52 +78,145 @@ Splunk facts for app hosted in a git repository:
 - splunk_facts: app_dirs=/opt/git-repo/apps
 '''
 
-
 RETURN = r'''
-# Return output looks something like the following:
+ansible_facts:
+  description: Splunk facts
+  type: dict
+  contains:
+    ansible_splunk_version:
+      description: >
+        Version of the Splunk software found
+      type: dict
+      returned: always
+      contains:
+        version:
+          sample: 9.0.4
+        build:
+          type: int
+        product:
+          type: str
+        platform:
+          type: str
 
-#    ansible_splunk_version
-#      version
-#      build
-#      product
-#      platform
-#    ansible_splunk_dist_search
-#      server_public_key
-#    ansible_splunk_config
-#      <config>
-#        <stanza>
-#          <key>
-#    ansible_splunk_ksconf
-#      version
-#      vcs_info
-#      build
-#      package
-#      path
-#      commands
-#        <name>
-#          class
-#          distro
-#          error
-#    ansible_splunk_apps:
-#        name
-#        root
-#        path
-#        app_conf
-#            version
-#            author
-#            description
-#            state
-#            build
-#            check_for_updates
-#            label
-#            is_visible
-#        sideload
-#            ansible_module_version
-#            installed_at
-#            src_hash
-#            src_path
+    ansible_splunk_dist_search:
+      description: distributed search public key
+
+    server_public_key:
+      description: public key for splunkd
+
+    ansible_splunk_config:
+      description: splunk configs
+      type: dict
+      sample:
+        <config>:
+          <stanza>:
+            <key>: value
+
+    ansible_splunk_ksconf:
+      description: ksconf version information
+      returned: when requested
+      type: dict
+      contains:
+        version:
+          type: str
+        vcs_info:
+          # Double check on this. could be a tuple?
+          type: str
+        build:
+          type: int
+        package:
+          type: str
+        path:
+          type: str
+        commands:
+          type: dict
+          contains:
+            <command>:
+              description:
+                - The key I(<command>) is dynamically set for each sub-command of the ksconf tool.
+              sample: xml-format
+              type: dict
+              contains:
+                class:
+                  description: class name
+                  type: str
+                distro:
+                  type: str
+                error:
+                  description:
+                    - Any errors related to specific ksconf commands.
+                    - This can happen for example if some Python modules are missing such as I(lxml) or I(splunksdk).
+                  type: str
+                  returned: on error
+
+    ansible_splunk_apps:
+      description:
+        - A list of Splunk apps found.
+        - Collection is restricted to the given set of apps in one of the provided I(app_dirs).
+      type: list
+      elements: dict
+      contains:
+        name:
+          description: Folder name of the Splunk app
+          type: str
+          returned: always
+        root:
+          description: app location prefix (based on the given value of I(app_dirs))
+          type: str
+          sample: deployment-apps
+          returned: always
+        path:
+          description: Full path to Splunk application.  This will uniquely identify an app.
+          type: str
+          returned: always
+        app_conf:
+          description:
+            - Configuration information extracted from C(app.conf).
+            - Only attributes present will be returned, unless otherwise noted.
+            - Data types noted below are based on normal app conventions.
+              However, if the app provides unexpected values (like a non-integer C(build)), that
+              value is passed along as-is and therefore may be of another type.
+          type: dict
+          returned: always
+          contains:
+            version:
+              type: str
+              returned: always
+            author:
+              type: str
+              returned: always
+            description:
+              description: Longer description contained with the app.
+                           (This is not typically shown anywhere in the UI)
+              type: str
+            state:
+              type: str
+            build:
+              type: int
+            check_for_updates:
+              type: bool
+            label:
+              description: Display name
+              type: str
+            is_visible:
+              description: Is the app visible in the user interface
+              type: bool
+        sideload:
+          type: dict
+          returned: Only present if the app was installed via I(ksconf_sideload_app) module.
+          description:
+            - Data loaded is dependent upon the version of ksconf and the sideload module.
+            # Check to see if this is still accurate as of v0.18+ of this module
+          contains:
+            ansible_module_version:
+              type: str
+            installed_at:
+              type: str
+            src_hash:
+              type: str
+            src_path:
+              type: str
 '''
-
 
 SPLUNK_VERSION = "etc/splunk.version"
 SPLUNK_INSTANCE_CFG = "etc/instance.cfg"

@@ -118,9 +118,9 @@ options:
 #notes:
 '''
 
-EXAMPLES_ = r'''
+EXAMPLES = r'''
 
-- name: Reload the deployment server:
+- name: Reload the deployment server
   cdillc.splunk.splunk_cli:
     cmd: reload deploy-server
     splunk_home: "{{splunk_home}}"
@@ -136,8 +136,13 @@ EXAMPLES_ = r'''
     username: "{{splunk_admin_user}}"
     password: "{{splunk_admin_pass}}"
 
+# Replacement for adding a search peer
+#   command: splunk add search-server -auth {{splunk_admin_user}}:{{splunk_admin_pass}}
+#            {{sh_url}} -remoteUsername {{sh_user}} -remotePassword {{sh_pass}}
+# This version protect the local and remote credentials
+
 - name: Add search peer
-   cdillc.splunk.splunk_cli
+  cdillc.splunk.splunk_cli:
     cmd: add search-server {{sh_url}}
     hidden_args:
       remoteUsername: "{{ sh_user }}"
