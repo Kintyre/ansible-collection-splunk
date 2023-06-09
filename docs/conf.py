@@ -41,3 +41,8 @@ intersphinx_mapping = {
 default_role = 'any'
 
 nitpicky = True
+
+
+html_context = {
+    "display_github": False,  # Since all the modules use inline docs, these "Edit on GitHub" links result in a 404
+}
