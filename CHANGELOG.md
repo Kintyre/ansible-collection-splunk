@@ -1,3 +1,6 @@
+## Release 0.19.0
+* Add Jinja2 template rendering to the `ksconf_package` module.
+
 ## Release 0.18.1 (2023-06-08)
 * NO changes.  Re-uploading the same codebase to workaround issue with Ansible Galaxy where it apparently gets confused about beta releases.
 

@@ -24,12 +24,32 @@ DOCUMENTATION = r'''
 module: ksconf_package
 short_description: Create a Splunk app from a local directory
 description:
-    - Build a Splunk app using the I(ksconf) package.
-    - The source directory may contain layers
+    - Build a Splunk app using the ksconf I(package) command.
+      This can be as simple drop-in replacement for the C(archive) module.
+      Advanced use cases can be supported by a combination of ksconf layers and/or Jinja templates.
+    - Jinja2 template expansion is supported for (C(*.j2)) files.
+      Notice that this is I(not) the same thing as the C(template) module.
+      Template expansion is limited to an explicit set of variables passed into this module.
+    - Ksconf I(layers) are fully supported and can be dynamically included or excluded with filters.
+    - Idempotent operations are supported by hashing various inputs and cached tarballs from a
+      previous run.
+      This allows quick execution when no inputs have changed which is a very normal case.
+      More could be done in this area.
+    - When using both templates and layering, be aware that Jinja2 templates are expanded before
+      layer filtering.  This allows one layer to include C(indexes.conf) and another layer to
+      include C(indexes.conf.j2).  All templates will be expanded first, then the resulting layers
+      will be merged.
+    - While not strictly required, in many common deployment scenarios, the C(ksconf_package)
+      modules is delegated to the localhost.
+      Apps contained within a version control system are packaged on the controller node and shipped
+      to various Splunk nodes.
+      App installation can be done using the C(ksconf_sideload_app) module.
+      Alternatives include using Splunk's app install CLI, or ship apps to Splunk Cloud via API.
+
 version_added: "0.10.0"
 author: Lowell C. Alleman (@lowell80)
 requirements:
-    - ksconf>=0.11.3
+    - ksconf>=0.11.4
 
 extends_documentation_fragment: action_common_attributes
 
@@ -109,6 +129,21 @@ options:
             - Placeholder variables, such as C({{app_id}}) can be used here.
         type: str
 
+    template_vars:
+        description:
+            - Add-hoc variables useable from within Jinja2 templates (C(*.j2) files).
+              The keys become additional variables available for templating.
+            - This dictionary can be structured any way that's helpful.
+              There are no restrictions imposed, but be aware that sending more variables than
+              needed could result in extra processing.
+              A hash is created of the full C(template_vars) data structure so a change to any
+              variable will result in a cache miss.
+            - Template files are detected based on the C(*.j2) pattern.
+              The C(.j2) extension will be removed from the final name.
+        type: dict
+        required: false
+        default: {}
+
     context:
         description:
             - Free-form metadata that is passed through to the output.
@@ -185,10 +220,10 @@ EXAMPLES = r'''
     local: preserve
     follow_symlink: false
     layers:
-        - exclude: "30-*"
-        - include: "30-{{role}}"
-        - exclude: "40-*"
-        - include: "40-{{env}}"
+      - exclude: "30-*"
+      - include: "30-{{role}}"
+      - exclude: "40-*"
+      - include: "40-{{env}}"
 
 # More complex example that loops over an 'apps_inventory' list that contains both
 # local directories and pre-packaged tarballs (which don't need to be re-packaged)
@@ -198,12 +233,17 @@ EXAMPLES = r'''
     file: "{{ tarred_apps_folder }}/{{ item.name }}-[[ layers_hash ]].tgz"
     local: preserve
     layers:
-        - include: "10-upstream"
-        - include: "20-common"
-        - include: "30-{{ app_role }}"
-        - include: "40-{{ layer_env }}"
-        - include: "50-{{ app_role }}-{{ layer_env }}"
-        - include: "60-{{ org }}"
+      - include: "10-upstream"
+      - include: "20-common"
+      - include: "30-{{ app_role }}"
+      - include: "40-{{ layer_env }}"
+      - include: "50-{{ app_role }}-{{ layer_env }}"
+      - include: "60-{{ org }}"
+    template_vars:
+      org_name: acme
+      default_retention: 7d
+      splunk:
+        key_password: "{{ splunk.key_password }}"
   delegate_to: localhost
   run_once: true
   loop: >
@@ -250,7 +290,8 @@ def main():
                        choices=["preserve", "block", "promote"],
                        default="preserve"
                        ),
-
+            # Do we need 'NO_LOG' here to protect sensitive information?
+            template_vars=dict(type="dict", default=None, required=False),
             follow_symlink=dict(type="bool", default=False),
             app_name=dict(type="str", default=None),
             context=dict(type="dict", default=None),
@@ -264,6 +305,7 @@ def main():
     block = params["block"]
     layer_method = params["layer_method"]
     layers = params["layers"]
+    template_vars = params["template_vars"] or {}
     local = params["local"]
     follow_symlink = module.boolean(params["follow_symlink"])
     app_name = params["app_name"]
@@ -277,40 +319,41 @@ def main():
         ret["context"] = params["context"]
 
     ksconf_version = check_ksconf_version(module)
-    if ksconf_version < (0, 11):
-        module.fail_json(msg="ksconf version>=0.11.0 is required.  Found {}".format(ksconf_version))
+    if ksconf_version < (0, 11, 4):
+        module.fail_json(msg=f"ksconf version>=0.11.4 is required.  Found {ksconf_version}")
 
     # Import the ksconf bits we need
     from ksconf.app.manifest import create_manifest_from_archive, load_manifest_for_archive
+    from ksconf.layer import layer_file_factory
     from ksconf.package import AppPackager
 
+    # This doesn't work (no __init__.py, and likely other issues, ...)
+    # from ansible_collections.cdillc.splunk.plugins.filter.cdi_jinja_filters import FilterModule
+
+    layer_file_factory.enable("jinja")
+
     if not os.path.isdir(source):
-        module.fail_json(msg="The source '{}' is not a directory or is not "
-                         "accessible.".format(source))
+        module.fail_json(msg=f"The source '{source}' is not a directory or is not accessible.")
 
     start_time = datetime.datetime.now()
 
     log_stream = StringIO()
-
-    # Just call combine (writing to a temporary directory) and the tar it up.
-    # At some point this should all be done in memory, as this would allow for quicker
-    # detection/reporting of changes to support idempotent behavior more efficiently.
 
     app_name_source = "set via 'app_name'"
     if not app_name:
         app_name = os.path.basename(source)
         app_name_source = "taken from source directory"
 
-    log_stream.write(to_text("Packaging {}   (App name {})\n".format(app_name, app_name_source)))
-
-    packager = AppPackager(source, app_name, output=log_stream)
+    module.log(f"Packaging {app_name}   (App name {app_name_source})")
+    packager = AppPackager(source, app_name, output=log_stream,
+                           template_variables=template_vars)
 
     with packager:
         # combine expects as list of (action, pattern)
         layer_filter = [(mode, pattern) for layer in layers
                         for mode, pattern in layer.items() if pattern]
         if layer_filter:
-            module.debug("Applying layer filter:  {0}".format(layer_filter))
+            module.debug(f"Applying layer filter:  {layer_filter}")
         packager.combine(source, layer_filter,
                          layer_method=layer_method,
                          allow_symlink=follow_symlink)
@@ -322,10 +365,11 @@ def main():
         elif local == "preserve":
             pass
         else:   # pragma: no cover
-            raise ValueError("Unknown value for 'local': {}".format(local))
+            # Does argument validation take care of this scenario?  Keep until confirmed....
+            module.fail_json(f"Unknown value for 'local': {local}")
 
         if block:
-            log_stream.write(to_text("Applying blocklist:  {!r}\n".format(block)))
+            module.debug(f"Applying blocklist:  {block!r}\n")
             packager.blocklist(block)
 
         '''
@@ -340,7 +384,8 @@ def main():
 
         archive_base = packager.app_name.lower().replace("-", "_")
 
-        # Should we default 'dest' if no value is given???? -- this seems problematic (at least we need to be more specific, like include a hash of all found layers??)
+        # Should we default 'dest' if no value is given???? -- this seems problematic
+        # (at least we need to be more specific, like include a hash of all found layers??)
         dest = dest_file or "{}-{{{{version}}}}.tgz".format(archive_base)
 
         # Check manifest of existing 'dest' archive to enable idempotent operation
@@ -369,9 +414,9 @@ def main():
             create_manifest_from_archive(archive_path, None, manifest=new_manifest)
 
         size = archive_path.stat().st_size
-        log_stream.write(f"Archive {resulting_action}:  "
-                         f"file={archive_path.name} "
-                         f"size={size / 1024.0:.2f}Kb\n")
+        module.log(f"Archive {resulting_action}:  "
+                   f"file={archive_path.name} "
+                   f"size={size / 1024.0:.2f}Kb")
 
         ret["action"] = resulting_action
         # Should this be expanded to be an absolute path?

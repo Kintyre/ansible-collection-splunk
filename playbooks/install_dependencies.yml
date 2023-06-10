@@ -18,6 +18,7 @@
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/files/requirements.txt"
         dest: "/tmp/cdillc-splunk-requirements.txt"
+        mode: "0640"
 
     - name: Install Python dependencies for the 'cdillc.splunk' collection
       ansible.builtin.pip:
