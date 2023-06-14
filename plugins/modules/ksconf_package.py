@@ -1,23 +1,13 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+# This is a virtual module entirely implemented as an action plugin that runs on the controller
+
 from __future__ import absolute_import, division, print_function
-
-import datetime
-import os
-import re
-from io import StringIO
-from pathlib import Path
-
-from ansible.module_utils._text import to_text
-from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import \
-    check_ksconf_version
 
 
 __metaclass__ = type
 
-MODULE_NAME = "ksconf_package"
 
 DOCUMENTATION = r'''
 ---
@@ -25,26 +15,21 @@ module: ksconf_package
 short_description: Create a Splunk app from a local directory
 description:
     - Build a Splunk app using the ksconf I(package) command.
-      This can be as simple drop-in replacement for the C(archive) module.
-      Advanced use cases can be supported by a combination of ksconf layers and/or Jinja templates.
-    - Jinja2 template expansion is supported for (C(*.j2)) files.
-      Notice that this is I(not) the same thing as the C(template) module.
-      Template expansion is limited to an explicit set of variables passed into this module.
+      This can be as simple drop-in replacement for the M(ansible.builtin.archive) module.
+      Advanced use cases can be supported by a combination of ksconf layers and/or file handlers.
+      Idempotent behavior is fully supported.
+    - The file handling mechanism allows for things like template rendering based on file matching.
+    - Jinja2 template expansion is supported for (C(*.j2)) files by either using pure Jinja or
+      Ansible Jinja handlers.
     - Ksconf I(layers) are fully supported and can be dynamically included or excluded with filters.
-    - Idempotent operations are supported by hashing various inputs and cached tarballs from a
-      previous run.
-      This allows quick execution when no inputs have changed which is a very normal case.
-      More could be done in this area.
-    - When using both templates and layering, be aware that Jinja2 templates are expanded before
-      layer filtering.  This allows one layer to include C(indexes.conf) and another layer to
-      include C(indexes.conf.j2).  All templates will be expanded first, then the resulting layers
-      will be merged.
-    - While not strictly required, in many common deployment scenarios, the C(ksconf_package)
-      modules is delegated to the localhost.
-      Apps contained within a version control system are packaged on the controller node and shipped
-      to various Splunk nodes.
-      App installation can be done using the C(ksconf_sideload_app) module.
-      Alternatives include using Splunk's app install CLI, or ship apps to Splunk Cloud via API.
+    - There are two Jinja template modes:
+      Standard C(jinja) mode uses plain Jinja syntax and is more portable (e.g., as it's also
+      available via the C(ksconf package) command.)
+      The C(ansible-jinja) mode supports all the features of Jinja within Ansible, which includes
+      access to inventory variables, Ansible's full range of filters and tests, as well as lookup
+      functionality.
+      By default, all file handling is disabled to avoid any unwanted content modification.
+      Use the I(enable_handler) option to enable a template handler.
 
 version_added: "0.10.0"
 author: Lowell C. Alleman (@lowell80)
@@ -129,17 +114,27 @@ options:
             - Placeholder variables, such as C({{app_id}}) can be used here.
         type: str
 
+    enable_handler:
+        description:
+            - Enable one or more file handlers for template expansion.
+              Currently support is limited to Jinja templates.
+            - Use C(jinja) for basic Jinja2 syntax support.
+              All necessary variables must be passed in via the I(template_vars) argument.
+            - Use C(ansible-jinja) to use the Ansible engine to handle all jinja rendering.
+              By default, all Ansible variables, filters, tests, and lookups are available.
+              This is effectively like using the M(ansible.builtin.template) module to render all
+              C(*.j2) files before packaging an app.
+        type: list
+        elements: str
+
     template_vars:
         description:
-            - Add-hoc variables useable from within Jinja2 templates (C(*.j2) files).
-              The keys become additional variables available for templating.
+            - Add-hoc variables useable during template expansion.
             - This dictionary can be structured any way that's helpful.
               There are no restrictions imposed, but be aware that sending more variables than
               needed could result in extra processing.
-              A hash is created of the full C(template_vars) data structure so a change to any
-              variable will result in a cache miss.
-            - Template files are detected based on the C(*.j2) pattern.
-              The C(.j2) extension will be removed from the final name.
+              Future speedups will be based on building a hash of full value of the I(template_vars)
+              data structure so any change will trigger a cache miss.
         type: dict
         required: false
         default: {}
@@ -155,11 +150,33 @@ options:
 # set_build
 
 notes:
+    - As of v0.19.0, the C(ksconf_package) modules is implemented as an action.
+      This means that it must run on the controller not the target machine.
+      In practice, this should not impact most use cases as specifying I(delegate_to: localhost
+      was the most common way to use this module anyways.
+      Switching from a module to an action allows us access to the full variable inventory that
+      isn't accessible to remote modules without explicitly passing in every variable needed.
     - Several arguments accept ksconf variables.  Traditionally these are written in a Jinja-2 like
       syntax, which is familiar, but leads to some confusion when embedded in an Ansible playbook.
       To avoid Jinja escaping these variables manually, this modules supports C([[var]]) syntax too.
       If the path includes C([[version]]) that will be translated to C({{version}}) before be
       handed to the ksconf tool.
+    - Jinja template files are detected based on the C(*.j2) pattern.
+      The C(.j2) extension will be removed from the final name.
+      Remember this off by default, and must be enabled with I(enable_handler).
+    - Idempotent operations are supported by hashing various inputs and cached tarballs from a
+      previous run.
+      This allows quick execution when no inputs have changed which is a very common scenario.
+      More work is planned to speed up this behavior.
+    - When using both templates and layering, be aware that Jinja2 templates are expanded before
+      layer filtering.  This allows one layer to include C(indexes.conf) and another layer to
+      include C(indexes.conf.j2).  All templates will be expanded first, then the resulting layers
+      will be merged.
+    - Normal use case:
+      Often apps are contained within a version control system are packaged on
+      the controller node and shipped to various Splunk nodes.
+      App installation can be done using the M(cdillc.splunk.ksconf_sideload_app) module.
+      Alternative installation methods include using Splunk's app install CLI, or ship apps to Splunk Cloud via API.
 '''
 
 
@@ -239,6 +256,7 @@ EXAMPLES = r'''
       - include: "40-{{ layer_env }}"
       - include: "50-{{ app_role }}-{{ layer_env }}"
       - include: "60-{{ org }}"
+    enable_handler: ansible-jinja
     template_vars:
       org_name: acme
       default_retention: 7d
@@ -254,199 +272,3 @@ EXAMPLES = r'''
   register: app_render_output
   tags: render
 '''
-
-
-def translate_ksconf_vars(value):
-    """
-    Translate any '[[var]]' format into '{{var}}' format for ksconf.  This
-    allows playbook authors to write:
-        [[var]]
-    instead of:
-        {{'{{'}}version{{'}}'}}
-    """
-    if value:
-        return re.sub(r'\[\[(\s*[\w_]+\s*)\]\]', r"{{\1}}", value)
-    return value
-
-
-def main():
-    module = AnsibleModule(
-        argument_spec=dict(
-            source=dict(type="path", required=True),
-            file=dict(type="path", required=True),
-            block=dict(type="list", elements="str", default=[]),
-            layer_method=dict(type="str",
-                              choices=["auto", "dir.d", "disable"],
-                              default="dir.d"),
-            layers=dict(type="list", default=[],
-                        elements="dict",
-                        options=dict(include=dict(type="str", default=None),
-                                     exclude=dict(type="str", default=None),
-                                     ),
-                        mutually_exclusive=[("include", "exclude")],
-                        required_one_of=[("include", "exclude")]
-                        ),
-            local=dict(type="str",
-                       choices=["preserve", "block", "promote"],
-                       default="preserve"
-                       ),
-            # Do we need 'NO_LOG' here to protect sensitive information?
-            template_vars=dict(type="dict", default=None, required=False),
-            follow_symlink=dict(type="bool", default=False),
-            app_name=dict(type="str", default=None),
-            context=dict(type="dict", default=None),
-        )
-    )
-    params = module.params
-    ret = {}
-
-    source = params["source"]
-    dest_file = params["file"]
-    block = params["block"]
-    layer_method = params["layer_method"]
-    layers = params["layers"]
-    template_vars = params["template_vars"] or {}
-    local = params["local"]
-    follow_symlink = module.boolean(params["follow_symlink"])
-    app_name = params["app_name"]
-
-    # Convert any [[var]] --> {{var}} for ksconf
-    dest_file = translate_ksconf_vars(dest_file)
-    app_name = translate_ksconf_vars(app_name)
-
-    # Copy 'context' through as-is
-    if params["context"]:
-        ret["context"] = params["context"]
-
-    ksconf_version = check_ksconf_version(module)
-    if ksconf_version < (0, 11, 4):
-        module.fail_json(msg=f"ksconf version>=0.11.4 is required.  Found {ksconf_version}")
-
-    # Import the ksconf bits we need
-    from ksconf.app.manifest import create_manifest_from_archive, load_manifest_for_archive
-    from ksconf.layer import layer_file_factory
-    from ksconf.package import AppPackager
-
-    # This doesn't work (no __init__.py, and likely other issues, ...)
-    # from ansible_collections.cdillc.splunk.plugins.filter.cdi_jinja_filters import FilterModule
-
-    layer_file_factory.enable("jinja")
-
-    if not os.path.isdir(source):
-        module.fail_json(msg=f"The source '{source}' is not a directory or is not accessible.")
-
-    start_time = datetime.datetime.now()
-
-    log_stream = StringIO()
-
-    app_name_source = "set via 'app_name'"
-    if not app_name:
-        app_name = os.path.basename(source)
-        app_name_source = "taken from source directory"
-
-    module.log(f"Packaging {app_name}   (App name {app_name_source})")
-    packager = AppPackager(source, app_name, output=log_stream,
-                           template_variables=template_vars)
-
-    with packager:
-        # combine expects as list of (action, pattern)
-        layer_filter = [(mode, pattern) for layer in layers
-                        for mode, pattern in layer.items() if pattern]
-        if layer_filter:
-            module.debug(f"Applying layer filter:  {layer_filter}")
-        packager.combine(source, layer_filter,
-                         layer_method=layer_method,
-                         allow_symlink=follow_symlink)
-        # Handle local files
-        if local == "promote":
-            packager.merge_local()
-        elif local == "block":
-            packager.block_local()
-        elif local == "preserve":
-            pass
-        else:   # pragma: no cover
-            # Does argument validation take care of this scenario?  Keep until confirmed....
-            module.fail_json(f"Unknown value for 'local': {local}")
-
-        if block:
-            module.debug(f"Applying blocklist:  {block!r}\n")
-            packager.blocklist(block)
-
-        '''
-        if args.set_build or args.set_version:
-            packager.update_app_conf(
-                version=args.set_version,
-                build=args.set_build)
-        '''
-
-        packager.check()
-        # os.system("ls -lR {}".format(packager.app_dir))
-
-        archive_base = packager.app_name.lower().replace("-", "_")
-
-        # Should we default 'dest' if no value is given???? -- this seems problematic
-        # (at least we need to be more specific, like include a hash of all found layers??)
-        dest = dest_file or "{}-{{{{version}}}}.tgz".format(archive_base)
-
-        # Check manifest of existing 'dest' archive to enable idempotent operation
-        archive_path = Path(packager.expand_var(dest))
-
-        # TODO:  Ensure that creation of dest is not interrupted (either in ksconf level or here)
-        #        Incomplete output files should never end up in dest.  (temp file rename pattern?
-
-        new_manifest = packager.make_manifest(calculate_hash=True)
-        existing_manifest = None
-
-        # Make this idempotent by checking for the output tarball, and determining if the app content changed
-        if archive_path.is_file():
-            existing_manifest = load_manifest_for_archive(archive_path)
-            if existing_manifest.hash == new_manifest.hash:
-                resulting_action = "skipped"
-            else:
-                resulting_action = "updated"
-        else:
-            resulting_action = "created"
-
-        if resulting_action != "skipped":
-            archive_path2 = packager.make_archive(dest)
-            # Assuming this is true, we can just discard the output of .make_archive()
-            assert str(archive_path) == archive_path2
-            create_manifest_from_archive(archive_path, None, manifest=new_manifest)
-
-        size = archive_path.stat().st_size
-        module.log(f"Archive {resulting_action}:  "
-                   f"file={archive_path.name} "
-                   f"size={size / 1024.0:.2f}Kb")
-
-        ret["action"] = resulting_action
-        # Should this be expanded to be an absolute path?
-        ret["archive"] = os.fspath(archive_path)
-        ret["app_name"] = packager.app_name
-        ret["archive_size"] = size
-
-        # TODO: Return DELTA, this is basically done and ready.  See DeploySequence.from_manifest_transformation(old, new)
-
-        # TODO: Return the layer names used.  Currently hidden behind AppPackager's internal call to "combine"
-        # ret["layers"] = list(...)
-
-    end_time = datetime.datetime.now()
-    delta = end_time - start_time
-
-    ret["start"] = to_text(start_time)
-    ret["end"] = to_text(end_time)
-    ret["delta"] = to_text(delta)
-    ret["stdout"] = to_text(log_stream.getvalue())
-
-    ret["changed"] = resulting_action != "skipped"
-
-    ret["new_hash"] = new_manifest.hash
-    ret["old_hash"] = existing_manifest.hash if existing_manifest else ""
-
-    # Fixup the 'layers' output (invocation/module_args/layers); drop empty
-    params["layers"] = {mode: pattern for layer in layers
-                        for mode, pattern in layer.items() if pattern}
-    module.exit_json(**ret)
-
-
-if __name__ == '__main__':
-    main()

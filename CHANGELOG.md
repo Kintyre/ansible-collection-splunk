@@ -1,5 +1,7 @@
 ## Release 0.19.0
-* Add Jinja2 template rendering to the `ksconf_package` module.
+* Add Jinja2 template rendering support to the `ksconf_package` module.
+* The `ksconf_package` module is now an "action" which means it has to be run from the controller.
+  This allows access to all variables, which is not possible when run from the remote machine, as modules are.
 
 ## Release 0.18.1 (2023-06-08)
 * NO changes.  Re-uploading the same codebase to workaround issue with Ansible Galaxy where it apparently gets confused about beta releases.

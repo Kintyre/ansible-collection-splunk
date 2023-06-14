@@ -8,7 +8,8 @@ from __future__ import absolute_import, division, print_function
 import json
 from typing import Tuple
 
-from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import SIDELOAD_STATE_FILE
+from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
+    SIDELOAD_STATE_FILE, check_ksconf_version)
 
 
 __metaclass__ = type
@@ -105,7 +106,10 @@ class ActionModule(ActionBase):
         result = super(ActionModule, self).run(tmp, task_vars)
         del tmp
 
-        # TODO: Check ksconf version on the control node (can't use check_ksconf_version() which needs a module)
+        ksconf_version = check_ksconf_version()
+        if ksconf_version < (0, 11):
+            return {'failed': True,
+                    'msg': f"ksconf version>=0.11 is required.  Found {ksconf_version}"}
 
         # Uses 'unarchive' like args
         source = src = self._task.args.get('src', None)
