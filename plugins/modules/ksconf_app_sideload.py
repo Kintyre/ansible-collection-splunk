@@ -54,6 +54,12 @@ options:
       - Typically this will be C(/opt/splunk/etc/apps) or a management folder like C(deployment-apps), C(manager-apps) (or C(master-apps) pre Splunk 9.0), or C(shcluster/apps).
     type: path
     required: true
+  state:
+    description:  The desired state of the app.  Use I(absent) to remove an exiting app from disk.
+    type: str
+    default: present
+    choices: [present, absent]
+    version_added: "0.20"
   io_buffer_size:
     description:
       - Size of the volatile memory buffer that is used for extracting files from the archive in bytes.
@@ -122,7 +128,7 @@ notes:
       This reduces the controller's processing overhead.
       For this speedup to work, the controller must have write access to the
       parent directory of I(src).
-      Also, any tarball created with I(ksconf_package) will already have this manifest file.
+      Tarballs created with M(cdillc.splunk.ksconf_package) will already have a manifest file.
 '''
 
 
@@ -155,7 +161,25 @@ EXAMPLES = r'''
     become: true
     become_user: "{{ splunk_nix_user }}"
     notify: "reload deployment-server"
-    tags: install'
+    tags: install
+
+- name: Install and uninstall apps
+  cdillc.splunk.ksconf_app_sideload:
+      src: "{{ apps_folder }}/{{ item }}"
+      dest: "{{ splunk_home }}/etc/deployment-apps"
+      state: "{{ item.state | default('present') }}
+    loop: >
+      {{ app_render_output.results
+        | selectattr("archive")
+        | selectattr("item.managed")
+        | map(attribute="archive")
+        + apps_inventory
+        | selectattr("tarball")
+        | selectattr("managed")
+        | map(attribute="tarball")
+      }}
+    become: true
+    become_user: "{{ splunk_nix_user }}"
 '''
 
 
@@ -198,7 +222,7 @@ src:
   type: str
   sample: "/home/paul/test.tar.gz"
 state:
-  description: State of the destination. Effectively always "directory".
+  description: State of the destination. Effectively always "directory" or "absent".
   returned: always
   type: str
   sample: "directory"
@@ -329,6 +353,8 @@ def main():
             src=dict(type='path', required=True),
             src_orig=dict(type="path", required=False),  # Internal (added by action)
             dest=dict(type='path', required=True),
+            # handled by the action; this code won't see state='absent'
+            state=dict(type="str", choices=["present", "absent"]),
             # show_manifest=dict(type=bool, default=False, alias="list_files")
             list_files=dict(type='bool', default=False)
         ),

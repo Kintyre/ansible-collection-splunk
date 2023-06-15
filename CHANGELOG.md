@@ -1,3 +1,6 @@
+## Release (PENDING)
+* Add support for removing apps with `ksconf_app_sideload` with `state=absent` thus reducing the typical workflow a bit further.
+
 ## Release 0.19.0 (2023-06-15)
 * Add Jinja2 template rendering support to the `ksconf_package` module.
 * The `ksconf_package` module is now an "action" which means it has to be run from the controller.

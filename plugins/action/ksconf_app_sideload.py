@@ -113,9 +113,20 @@ class ActionModule(ActionBase):
 
         # Uses 'unarchive' like args
         source = src = self._task.args.get('src', None)
+        state = self._task.args.get("state", "present")
         dest = self._task.args.get('dest', None)
         decrypt = self._task.args.get('decrypt', True)
         list_files = self._task.args.get('list_files', False)
+
+        # Handle app removal.  Simply proxy to file:  state=absent
+        if state == "absent":
+            #
+            file_args = dict(path=dest, state=state)
+            file_results = self._execute_module(module_name="ansible.builtin.file",
+                                                module_args=file_args,
+                                                task_vars=task_vars)
+            result.update(file_results)
+            return result
 
         changed = True
         try:
