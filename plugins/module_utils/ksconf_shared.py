@@ -12,7 +12,7 @@ from ansible.module_utils.basic import AnsibleModule
 from ansible.utils.display import Display
 
 
-__version__ = "0.18.1"
+__version__ = "0.19.0"
 
 SIDELOAD_STATE_FILE = ".ksconf_sideload.json"
 
