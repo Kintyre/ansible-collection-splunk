@@ -222,6 +222,9 @@ class ActionModule(ActionBase):
         packager = AppPackager(source, app_name, output=log_stream,
                                template_variables=template_vars)
 
+        # Reminder: move to constructor (once ksconf>=v0.11.5 dependency)
+        packager.predictable_mtime = False
+
         with packager:
             # combine expects as list of (action, pattern)
             layer_filter = [(mode, pattern) for layer in layers
@@ -265,9 +268,6 @@ class ActionModule(ActionBase):
             # Check manifest of existing 'dest' archive to enable idempotent operation
             archive_path = Path(packager.expand_var(dest))
 
-            # TODO:  Ensure that creation of dest is not interrupted (either in ksconf level or here)
-            #        Incomplete output files should never end up in dest.  (temp file rename pattern?
-
             new_manifest = packager.make_manifest(calculate_hash=True)
             existing_manifest = None
 
@@ -283,8 +283,8 @@ class ActionModule(ActionBase):
 
             if resulting_action != "skipped":
                 archive_path2 = packager.make_archive(dest)
-                # Assuming this is true, we can just discard the output of .make_archive()
                 assert str(archive_path) == archive_path2
+                # Write manifest created by packager to disk
                 create_manifest_from_archive(archive_path, None, manifest=new_manifest)
 
             size = archive_path.stat().st_size
