@@ -114,11 +114,11 @@ notes:
     - Existing files/directories in the destination which are not in the archive
       are removed.  This requires that the prior app installation include a manifest.
       This feature was added in v0.18 of this collection; and all hash calculations have changed.
-    - Note that only B(files) are extracted.
+    - Note that only I(files) are extracted.
       This means empty directories will not be created.
       If this cause an issue for you, open a bug report and describe your use case.
     - Too speed up subsequent calls to I(ksconf_app_sideload), manifest files are created and cached
-      on the controller node (this live in the directory as I(src)).
+      on the controller node in the same directory as I(src).
       This reduces the controller's processing overhead.
       For this speedup to work, the controller must have write access to the
       parent directory of I(src).

@@ -15,14 +15,15 @@ module: ksconf_package
 short_description: Create a Splunk app from a local directory
 description:
     - Build a Splunk app using the ksconf I(package) command.
-      This can be as simple drop-in replacement for the M(ansible.builtin.archive) module.
+      This can be as simple drop-in replacement for the M(community.general.archive) module.
       Advanced use cases can be supported by a combination of ksconf layers and/or file handlers.
       Idempotent behavior is fully supported.
     - The file handling mechanism allows for things like template rendering based on file matching.
     - Jinja2 template expansion is supported for (C(*.j2)) files by either using pure Jinja or
       Ansible Jinja handlers.
     - Ksconf I(layers) are fully supported and can be dynamically included or excluded with filters.
-    - There are two Jinja template modes:
+    - |
+      There are two Jinja template modes:
       Standard C(jinja) mode uses plain Jinja syntax and is more portable (e.g., as it's also
       available via the C(ksconf package) command.)
       The C(ansible-jinja) mode supports all the features of Jinja within Ansible, which includes
@@ -150,9 +151,10 @@ options:
 # set_build
 
 notes:
-    - As of v0.19.0, the C(ksconf_package) modules is implemented as an action.
+    - |
+      As of v0.19.0, the C(ksconf_package) modules is implemented as an action.
       This means that it must run on the controller not the target machine.
-      In practice, this should not impact most use cases as specifying I(delegate_to: localhost
+      In practice, this should not impact most use cases as specifying I(delegate_to: localhost)
       was the most common way to use this module anyways.
       Switching from a module to an action allows us access to the full variable inventory that
       isn't accessible to remote modules without explicitly passing in every variable needed.
@@ -172,11 +174,13 @@ notes:
       layer filtering.  This allows one layer to include C(indexes.conf) and another layer to
       include C(indexes.conf.j2).  All templates will be expanded first, then the resulting layers
       will be merged.
-    - Normal use case:
+    - |
+      Normal use case:
       Often apps are contained within a version control system are packaged on
       the controller node and shipped to various Splunk nodes.
-      App installation can be done using the M(cdillc.splunk.ksconf_sideload_app) module.
+      App installation can be done using the M(cdillc.splunk.ksconf_app_sideload) module.
       Alternative installation methods include using Splunk's app install CLI, or ship apps to Splunk Cloud via API.
+
 '''
 
 
