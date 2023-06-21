@@ -1,3 +1,8 @@
+## Release 0.19.1 (2023-06-21)
+* Fix minor import bug with shared module (possibly only impacting older version of Ansible?)
+* Make find_splunk_home() heuristic slightly smarter.  It will now correctly skip over an empty splunk home and pick the correct one when multiple are present, but one is empty.
+* Add `splunk-launch.conf` and `swidtag` output to the `splunk_facts` module.
+
 ## Release 0.19.0 (2023-06-15)
 * Add Jinja2 template rendering support to the `ksconf_package` module.
 * The `ksconf_package` module is now an "action" which means it has to be run from the controller.

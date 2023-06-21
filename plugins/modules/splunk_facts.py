@@ -112,6 +112,39 @@ ansible_facts:
           <stanza>:
             <key>: value
 
+    ansible_splunk_launch:
+      description:
+        - Splunk's startup configuration files located in C(splunk-launch.conf).
+        - The exact keys located here will vary based on which settings are present.
+          Contents shown here are based on popular settings.
+      type: dict
+      contains:
+        SPLUNK_SERVER_NAME:
+          description: Local server's name.  Popular values include C(Splunkd) and C(SplunkForwarder)
+          type: str
+        SPLUNK_DB:
+          description: Default path to splunk indexes.
+          type: str
+        SPLUNK_OS_USER:
+          description: Name of the user Splunk runs as.
+          type: str
+        PYTHONHTTPSVERIFY:
+          type: str
+
+    ansible_splunk_swid:
+      description: Software id tags
+      type: dict
+      contains:
+        name:
+          description:
+            - Software name.  Examples include C(Splunk Enterprise) and C(UniversalForwarder).
+          type: str
+          sample: UniversalForwarder
+        version:
+          type: str
+        patch:
+          type: str
+
     ansible_splunk_ksconf:
       description: ksconf version information
       returned: when requested
@@ -216,10 +249,17 @@ ansible_facts:
               type: str
             src_path:
               type: str
+
+    ansible_splunk_app_root_missing:
+      description:
+        - App paths that were inaccessible and therefore are not listed in I(ansible_splunk_apps).
+      type: list
+      elements: str
 '''
 
 SPLUNK_VERSION = "etc/splunk.version"
 SPLUNK_INSTANCE_CFG = "etc/instance.cfg"
+SPLUNK_LAUNCH_CONF = "etc/splunk-launch.conf"
 SPLUNK_AUTH_SECRET = "etc/auth/splunk.secret"
 SPLUNK_DIST_SEARCH_PUB_KEY = "etc/auth/distServerKeys/trusted.pem"
 SPLUNK_APP_DIRS = [
@@ -245,12 +285,14 @@ class SplunkMetadata(object):
                 return
         self.splunk_home = Path(splunk_home)
         self._fail = False
-        self._error = None
+        self._error = []
         self._data = {}
         self._prefix = 'ansible_splunk_%s'
         self.fetch_version()
         self.fetch_dist_search_keys()
         self.fetch_guid()
+        self.fetch_swid()
+        self.fetch_launch_vars()
         self.fetch_splunksecret()
         if ksconf_level != "skip":
             self.fetch_ksconf_version(ksconf_level)
@@ -258,10 +300,10 @@ class SplunkMetadata(object):
             self.fetch_app_info(Path(app_dir))
 
     def error(self, msg):
-        self._error = msg
+        self._error.append(msg)
 
     def fail(self, msg):
-        self._error = msg
+        self.error(msg)
         self._fail = True
 
     def fetch_version(self):
@@ -276,6 +318,37 @@ class SplunkMetadata(object):
             self._data["version"] = sv
         except Exception:
             self.fail("Unable to get version info from file:  %s" % splunk_version)
+
+    def fetch_launch_vars(self):
+        launch: Path = self.splunk_home / SPLUNK_LAUNCH_CONF
+        launch_vars = {}
+        try:
+            text = launch.read_text()
+            for match in re.finditer(r'(?:^|[\r\n]+)([A-Z_]+)=([^\r\n]+)', text):
+                key, value = match.groups()
+                launch_vars[key] = value
+        except Exception as e:
+            self.error(f"Unable to load launch values from {launch} due to exception: {e}")
+        if launch_vars:
+            self._data["launch"] = launch_vars
+
+    def fetch_swid(self):
+        # Use regex here to avoid dealing with XML libraries for this very basic structure
+        swid = {}
+        for p in self.splunk_home.glob("swidtag/*.swidtag"):
+            try:
+                swid["_source"] = str(p)
+                match = re.search(r'<SoftwareIdentity (.*?)/?>', p.read_text())
+                if match:
+                    text = match.group(1)
+                    # TODO: support both double and single quotes....
+                    for match in re.finditer(r'\b([\w:]+)="([^"]*)"', text):
+                        tag, value = match.groups()
+                        swid[tag] = value
+            except Exception as e:
+                self.error(f"Unable to load launch values from {p} due to exception: {e}")
+        if swid:
+            self._data["swid"] = swid
 
     def fetch_dist_search_keys(self):
         # NOTE:  To get the correct path, we need to do something like:
@@ -406,13 +479,13 @@ class SplunkMetadata(object):
 
     def return_facts(self):
         if self._fail:
-            return dict(failed=True, msg=self._error)
+            return dict(failed=True, msg="\n".join(self._error))
         sf = {}
         sf[self._prefix % "home"] = os.fspath(self.splunk_home)
         for (key, value) in self._data.items():
             sf[self._prefix % key] = value
         if self._error:
-            sf["msg"] = self._error
+            sf["msg"] = "\n".join(self._error)
         return dict(changed=False, ansible_facts=sf)
 
 
