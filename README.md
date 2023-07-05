@@ -3,10 +3,11 @@
 ## Contents
 
 See the [official docs](https://cdillc-splunk.readthedocs.io/) for the expanded list of all supported functionality.
-Below is a brief overview.
+Recent updates are documented in the [changelog](https://github.com/Kintyre/ansible-collection-splunk/blob/main/CHANGELOG.md)
+Below is a brief summary of current features.
 
 
-Modules for the collection.
+### Modules
 
 | Module | Description |
 | ------ | ----------- |
@@ -14,23 +15,26 @@ Modules for the collection.
 | [ksconf_app_sideload](https://cdillc-splunk.readthedocs.io/en/latest/collections/cdillc/splunk/ksconf_app_sideload_module) | Install a Splunk app from a tarball (`.tar.gz` or `.spl`) into a Splunk instance using a sideload technique.  The tarball is extracted into `apps` (where a normal "install" is suitable, or into management folders (i.e., `deployment-apps`, `manager-apps`, `shcluster/apps`) where Splunk provides no official install utility.  On the surface, this is similar to Ansible's `unarchive` module except with much better idempotent behavior; `unarchive` checks to see if the top-level destination folder exists, whereas this module can track installation version and checksum to determine when the archive should be expanded.  (Some of these features are a work in progress; at the moment this is *very* much like Ansible's `unarchive`)  (Please don't confuse this with `ksconf unarchive` which handles getting tarballs into a repository, not installing apps into a Splunk instance.) |
 | [splunk_cli](https://cdillc-splunk.readthedocs.io/en/latest/collections/cdillc/splunk/splunk_cli_module) | Execute a `splunk` command locally or remotely (via a remote Splunkd URI). Unlike using the built-in `command` module, the `password` field alone is marked NO_LOG, so it's possible to see the rest of the command in the logs making troubleshooting easier and auditing more accurate.   Use this instead of `command: "{{splunk_home}}/bin/splunk ..."` |
 | [splunk_control](https://cdillc-splunk.readthedocs.io/en/latest/collections/cdillc/splunk/splunk_control_module) | Use the REST API to stop/restart a running Splunk instance.  This may replace the use of `service`, but both options have advantages in specific use cases. |
-| [splunk_facts](https://cdillc-splunk.readthedocs.io/en/latest/collections/cdillc/splunk/splunk_facts_module) | Collect various facts about a Splunk installation.  Supports multiple instance by specifying the `splunk_home` or standard install locations will be checked. | |
+| [splunk_facts](https://cdillc-splunk.readthedocs.io/en/latest/collections/cdillc/splunk/splunk_facts_module) | Collect various facts about a Splunk installation.  Supports multiple instance by specifying the `splunk_home` or standard install locations will be checked. |
 | [splunk_rest_conf](https://cdillc-splunk.readthedocs.io/en/latest/collections/cdillc/splunk/splunk_rest_conf_module) | Manipulate various `.conf` files of a running Splunk instance over the REST API.  Use this instead of  `uri: url=https://localhost:8089/services/configs/conf-{type}/... ` |
 | [splunk_user](https://cdillc-splunk.readthedocs.io/en/latest/collections/cdillc/splunk/splunk_user_module) | Manipulate local Splunk user accounts.  Add, delete, modify, or change password. |
 
 
-Filters for the collection
+### Filters
 
 | Filter | Description |
 | ------ | ----------- |
 | [reltime_to_sec](https://cdillc-splunk.readthedocs.io/en/latest/collections/cdillc/splunk/reltime_to_sec_filter) | Convert a Splunk relative time string into seconds.  For example, in indexes.conf: `frozenTimePeriodInSecs = {{ "7d" \|  cdillc.splunk.reltime_to_sec }}`.  The suffixes `s`, `m`, `h`, `d`, `y` are supported. |
 
+### Playbooks
 
-## Playbooks
+| Playbook | Description |
+| -------- | ----------- |
+| `install_dependencies.yml` | Install python dependencies.  Specify the targeted group by setting `splunk_host`. |
 
-# Install python dependencies:
+Run any of the above playbooks using the collection's prefix and without the `.yml`.  For example, to install dependencies to the _full_ group, run
 ```bash
-ansible-playbook cdillc.splunk.install_dependencies
+ansible-playbook cdillc.splunk.install_dependencies -e splunk_host=full
 ```
 
 ## Testing
@@ -68,7 +72,7 @@ ansible -m cdillc.splunk.splunk_facts splunk -i inventory -b --become-user splun
 
 
 
-Developer mode install:
+### Developer mode install
 
 ```bash
 mkdir -p ~/.ansible/collections/ansible_collections/cdillc
