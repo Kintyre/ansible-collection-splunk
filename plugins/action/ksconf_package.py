@@ -32,7 +32,7 @@ TEMPLATE_HANDLERS = JINJA_HANDLERS
 
 
 ksconf_min_version = (0, 11, 4)
-ksconf_min_version_text = ".".join("{}".format(i) for i in ksconf_min_version)
+ksconf_min_version_text = ".".join(f"{i}" for i in ksconf_min_version)
 
 ksconf_version = check_ksconf_version()
 if ksconf_version < ksconf_min_version:
@@ -116,6 +116,8 @@ def translate_ksconf_vars(value):
         [[var]]
     instead of:
         {{'{{'}}version{{'}}'}}
+    or, worse yet:
+        {% raw %}{{ var }}{% endraw %}
     """
     if value:
         return re.sub(r'\[\[(\s*[\w_]+\s*)\]\]', r"{{\1}}", value)

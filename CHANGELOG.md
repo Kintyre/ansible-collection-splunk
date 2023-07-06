@@ -1,3 +1,7 @@
+## Release 0.19.2 (DRAFT)
+* Update ksconf_app_sideload module's ksconf version check fail when ksconf is too old.  If it's just slightly old, a warning is issued.
+* Updated requirements to drop the 'requests' library, which we don't use so I'm not sure how it got in there.
+
 ## Release 0.19.1 (2023-06-21)
 * Fix minor import bug with shared module (possibly only impacting older version of Ansible?)
 * Make find_splunk_home() heuristic slightly smarter.  It will now correctly skip over an empty splunk home and pick the correct one when multiple are present, but one is empty.

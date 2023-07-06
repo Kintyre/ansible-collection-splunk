@@ -27,7 +27,10 @@ from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import
 __metaclass__ = type
 
 ksconf_min_version = (0, 11)
-ksconf_min_version_text = ".".join("{}".format(i) for i in ksconf_min_version)
+ksconf_warn_version = (0, 11, 4)
+
+ksconf_min_version_text = ".".join(f"{i}" for i in ksconf_min_version)
+ksconf_warn_version_text = ".".join(f"{i}" for i in ksconf_warn_version)
 
 
 DOCUMENTATION = r'''
@@ -338,9 +341,14 @@ def main():
 
     ksconf_version = check_ksconf_version(module)
     if ksconf_version < ksconf_min_version:
-        module.warn("ksconf version {} is older than v{}.  This may result in "
-                    "unexpected behavior.  Please upgrade ksconf.".format(ksconf_version,
-                                                                          ksconf_min_version_text))
+        module.fail_json(
+            msg=f"ksconf version {ksconf_version} is older than {ksconf_min_version_text}.  "
+            "This may result in unexpected behavior.  Please upgrade ksconf to "
+            f"{ksconf_warn_version_text} or higher.  Please run:  \n"
+            "    ansible-playbook cdillc.splunk.install_dependencies -e splunk_host=all")
+    if ksconf_version < ksconf_warn_version:
+        # It *should* still work, but your milage may vary
+        module.warn(f"ksconf version {ksconf_version} is older than {ksconf_warn_version_text}.")
 
     src = module.params['src']
     src_orig = module.params["src_orig"]
