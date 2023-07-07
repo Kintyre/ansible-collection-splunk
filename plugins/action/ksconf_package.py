@@ -96,7 +96,7 @@ class LayerFile_AnsibleJinja2(LayerRenderedFile):
         # of 'template_*' variables (like path/mtime/host).  These tend to interfere with
         # idempotent behavior so not a big loss)
         template = template_path.read_text()
-        value = self.templar.do_template(template)
+        value = self.templar.do_template(template, escape_backslashes=False)
         # TODO: If the file is a .conf or .meta file, then attempt to parse and report any errors to
         #       the caller.  This prevents broken .conf files from being deployed!
 

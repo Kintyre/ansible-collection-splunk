@@ -1,4 +1,6 @@
 ## Release 0.19.2 (DRAFT)
+* Disable `escape_backslashes` when using ansible-jinja templating mode.
+  For example, this was causing some `\n` to come though as a literal value, instead of a newline.
 * Update ksconf_app_sideload module's ksconf version check fail when ksconf is too old.  If it's just slightly old, a warning is issued.
 * Updated requirements to drop the 'requests' library, which we don't use so I'm not sure how it got in there.
 
