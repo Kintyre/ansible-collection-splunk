@@ -1,3 +1,6 @@
+## Release 0.19.4 (2023-07-20)
+* Add the most basic stdout callback handler ever 'asis' which simply dumps any 'stdout', 'stderr', and 'msg' fields with minimal no formatting.  All other result fields are disregarded.
+
 ## Release 0.19.3 (2023-07-19)
 * `splunk_cli`:
   * Fix but with `hidden_args` processing bug.
