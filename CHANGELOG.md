@@ -1,3 +1,11 @@
+## Release 0.19.3 (2023-07-19)
+* `splunk_cli`:
+  * Fix but with `hidden_args` processing bug.
+  * Improve error handling while parsing `cmd` into args.
+* `ksconf_package`:
+  * Reduce amount of output produced during normal processing.  Use `-v` or `-vv` to get additional feedback.
+  * Changed output `action` slightly.  Now using "unchanged" rather than "skipped".  This field has been added to the docs.
+
 ## Release 0.19.2 (2023-07-07)
 * Disable `escape_backslashes` when using ansible-jinja templating mode.
   For example, this was causing some `\n` to come though as a literal value, instead of a newline.

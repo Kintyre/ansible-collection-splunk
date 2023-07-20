@@ -220,7 +220,8 @@ class ActionModule(ActionBase):
             app_name = os.path.basename(source)
             app_name_source = "taken from source directory"
 
-        display.display(f"Packaging {app_name}   (App name {app_name_source})")
+        # TODO:  Add input directory caching/finger printing mechanism to speed-up when unchanged
+        display.v(f"Packaging {app_name}   (App name {app_name_source})")
         packager = AppPackager(source, app_name, output=log_stream,
                                template_variables=template_vars)
 
@@ -232,7 +233,7 @@ class ActionModule(ActionBase):
             layer_filter = [(mode, pattern) for layer in layers
                             for mode, pattern in layer.items() if pattern]
             if layer_filter:
-                display.debug(f"Applying layer filter:  {layer_filter}")
+                display.vv(f"Applying layer filter:  {layer_filter}")
             packager.combine(source, layer_filter,
                              layer_method=layer_method,
                              allow_symlink=follow_symlink)
@@ -248,7 +249,7 @@ class ActionModule(ActionBase):
                 return failed(f"Unknown value for 'local': {local}")
 
             if block:
-                display.debug(f"Applying blocklist:  {block!r}")
+                display.v(f"Applying blocklist:  {block!r}")
                 packager.blocklist(block)
 
             '''
@@ -277,22 +278,21 @@ class ActionModule(ActionBase):
             if archive_path.is_file():
                 existing_manifest = load_manifest_for_archive(archive_path)
                 if existing_manifest.hash == new_manifest.hash:
-                    resulting_action = "skipped"
+                    resulting_action = "unchanged"
                 else:
                     resulting_action = "updated"
             else:
                 resulting_action = "created"
 
-            if resulting_action != "skipped":
+            if resulting_action != "unchanged":
                 archive_path2 = packager.make_archive(dest)
                 assert str(archive_path) == archive_path2
                 # Write manifest created by packager to disk
                 create_manifest_from_archive(archive_path, None, manifest=new_manifest)
 
             size = archive_path.stat().st_size
-            display.display(f"Archive {resulting_action}:  "
-                            f"file={archive_path.name} "
-                            f"size={size / 1024.0:.2f}Kb")
+            display.v(f"Archive {resulting_action}:  file={archive_path.name} "
+                      f"size={size / 1024.0:.2f}Kb")
 
             result["action"] = resulting_action
             # Should this be expanded to be an absolute path?
@@ -314,7 +314,7 @@ class ActionModule(ActionBase):
         result["delta"] = to_text(delta)
         result["stdout"] = to_text(log_stream.getvalue())
 
-        result["changed"] = resulting_action != "skipped"
+        result["changed"] = resulting_action != "unchanged"
 
         result["new_hash"] = new_manifest.hash
         result["old_hash"] = existing_manifest.hash if existing_manifest else ""

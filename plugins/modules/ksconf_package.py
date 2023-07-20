@@ -192,6 +192,12 @@ app_name:
     type: str
     returned: always
     sample: org_custom_tech
+action:
+  description: >
+    Resulting action code.  Values are C(created), C(updated), or C(unchanged).
+  type: str
+  returned: always
+  sample: unchanged
 archive:
     description: >
         The location where the generated archive lives.

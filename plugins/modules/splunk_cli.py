@@ -223,7 +223,12 @@ def main():
                 stderr=False
             )
 
-    args = shlex.split(args)
+    try:
+        args = shlex.split(args)
+    except ValueError as e:
+        module.fail_json(msg=f"Failed to parse command into arguments.  {e}  "
+                             f"cmd={args!r}")
+
     executable = os.path.join(splunk_home, "bin", "splunk")
     start_time = datetime.datetime.now()
 
@@ -241,7 +246,7 @@ def main():
         args.append(splunk_uri)
 
     if hidden_args:
-        for arg, value in hidden_args.values():
+        for arg, value in hidden_args.items():
             if not arg.startswith("-"):
                 arg = "-" + arg
             args.append(arg)
