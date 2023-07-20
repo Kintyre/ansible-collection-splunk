@@ -10,7 +10,7 @@ import re
 from ansible.module_utils.basic import AnsibleModule
 
 
-__version__ = "0.19.2"
+__version__ = "0.19.3"
 
 SIDELOAD_STATE_FILE = ".ksconf_sideload.json"
 
