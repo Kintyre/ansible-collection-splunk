@@ -540,7 +540,7 @@ def main():
     except Exception as e:
         module.fail_json(msg="Unable to connect to splunkd.  Exception: %s" % e)
 
-    if p["force_change_pass"] is not None:
+    if p["state"] == "present" and p["force_change_pass"] is not None:
         module.warn(f"{MODULE_NAME} support for 'force_change_pass' is currently broken.  "
                     "Disregarding that parameter until a solution is found.")
         p["force_change_pass"] = None
