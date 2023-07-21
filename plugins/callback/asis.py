@@ -20,8 +20,6 @@ DOCUMENTATION = '''
     version_added: v0.19.4
     description:
         - This output callback will simply dump the values of C(stdout), C(stderr), and C(msg) fields to the screen, as is.
-    extends_documentation_fragment:
-      - result_format_callback
 '''
 
 
@@ -38,6 +36,7 @@ class CallbackModule(CallbackBase):
 
     def _command_generic_msg(self, host, result, caption):
         ''' output the result of a command run '''
+        # TODO:  Add some kind of indentation here (defaults to 4 elsewhere)
         buf = ["%s | %s | rc=%s >>\n" % (host, caption, result.get('rc', -1))]
 
         def add(s):
@@ -56,11 +55,13 @@ class CallbackModule(CallbackBase):
         self._handle_warnings(result._result)
 
         if result._task.action in C.MODULE_NO_JSON and 'module_stderr' not in result._result:
-            self._display.display(self._command_generic_msg(
-                result._host.get_name(), result._result, "FAILED"), color=C.COLOR_ERROR)
+            self._display.display(self._command_generic_msg(result._host.get_name(),
+                                                            result._result, "FAILED"),
+                                  color=C.COLOR_ERROR)
         else:
-            self._display.display("%s | FAILED! => %s" % (result._host.get_name(
-            ), self._dump_results(result._result, indent=4)), color=C.COLOR_ERROR)
+            self._display.display("%s | FAILED! => %s" % (result._host.get_name(),
+                                                          self._dump_results(result._result, indent=4)),
+                                  color=C.COLOR_ERROR)
 
     def v2_runner_on_ok(self, result):
         self._clean_results(result._result, result._task.action)
@@ -75,8 +76,16 @@ class CallbackModule(CallbackBase):
             color = C.COLOR_OK
             state = 'SUCCESS'
 
-        self._display.display(self._command_generic_msg(
-            result._host.get_name(), result._result, state), color=color)
+        priority_msg = result._result.get("priority_msg", "")
+        if result._result.get("no_log", None):
+            # Not sure how to check if "no_log" was set on the module paramaters....
+            pass
+        elif priority_msg:
+            self._display.display(priority_msg, color=color)
+        else:
+            self._display.display(self._command_generic_msg(result._host.get_name(),
+                                                            result._result, state),
+                                  color=color)
 
         '''
         if result._task.action in C.MODULE_NO_JSON and 'ansible_job_id' not in result._result:

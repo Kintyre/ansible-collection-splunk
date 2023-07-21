@@ -159,6 +159,13 @@ options:
             - Email address associated with the Splunk user.
         required: false
         default: null
+
+    force_change_pass:
+        description:
+            - Force user to change password.  This field is only set when the user is first created.
+        required: false
+        default: null
+        type: bool
 '''
 
 RETURN = r'''
@@ -173,6 +180,12 @@ token:
   description:
     - The Splunk auth token created used for the REST API calls.
     - This value can be passed into I(token) of a subsequent REST-based operation.
+updated_attrs:
+  description: A list of attributes that were set.
+  type: list
+content:
+  description: User attributes as returned by Splunk.
+  type: dict
 endpoint:
   description: URL used to edit the user object
   type: str
@@ -254,6 +267,9 @@ def connect(module, uri, username, password, token=None, owner=None, app=None, s
 
 
 def create_user(module, service, params):
+    """
+    Create or or update Splunk local user.
+    """
     splunk_user = params["splunk_user"]
     splunk_pass = params["splunk_pass"]
     roles = params["roles"]
@@ -263,6 +279,7 @@ def create_user(module, service, params):
     defaultapp = params["defaultapp"]
     update_password = params["update_password"]
     append_roles = params["append_roles"]
+    force_change_pass = params["force_change_pass"]
 
     output = {}
     changes = {}
@@ -275,8 +292,12 @@ def create_user(module, service, params):
             changes["password"] = splunk_pass
             atrsupd.append("password")
     except KeyError:
+        extras = {}
+        if force_change_pass is not None:
+            extras["force-change-pass"] = force_change_pass
+            atrsupd.append("force_change_pass")
         user = service.users.create(username=splunk_user, password=splunk_pass,
-                                    roles=roles)
+                                    roles=roles, **extras)
         atrsupd.extend(["user", "password", "roles"])
         created = True
 
@@ -386,15 +407,10 @@ def main():
             tz=dict(default=None),
             realname=dict(default=None),
             defaultapp=dict(default=None),
-            email=dict(default=None)
+            email=dict(default=None),
+            force_change_pass=dict(default=None, type="bool")
         ),
     )
-
-    # Outputs
-    #   result:     created, updated (merge), deleted
-    #   endpoint:   The Splunk REST endpoint path used by this operation
-    #   attributes:  The dictionary containing user values
-    #   token:      Splunk auth token
 
     p = module.params
 
