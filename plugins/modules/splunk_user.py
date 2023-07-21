@@ -81,17 +81,17 @@ options:
     state:
         description:
             - Ensure the user is either present or absent; or list the contents of the user's configuration.
-            - With C(present), existing users are updated in place.  See notes regarding specific handling of the I(roles), I(splunk_pass), and I(force_change_pass).
+            - With C(present), existing users are updated in place.
+              See notes regarding specific handling of the I(roles), I(splunk_pass), and I(force_change_pass).
         required: false
         default: present
         choices: [present, absent, list]
 
     update_password:
         description:
-            - Replace the existing password with the one specified in I(password) or force a password change using I(force_change_pass)
-            - When using this to change I(password) this this module will always report as
-              changed since there is no way to determine if the new password is
-              different than the currently assigned password.
+            - Replace the existing password with the one specified in I(password).
+            - When I(true) this module will always report changed since there is no way to
+              determine if the new password is different than the currently assigned password.
         required: false
         default: false
         type: bool
@@ -162,10 +162,20 @@ options:
         default: null
         type: bool
 
+    update_force_change_pass:
+        description:
+            - Use in combination with I(force_change_pass) to force an update to an existing user.
+            - Whenever this is set to I(true) the module will always report as changed.
+              The Splunk REST api does not allow the C(force-change-pass) to be read.
+        required: false
+        default: false
+        type: bool
+
 notes:
     - The default behavior of this module will only set I(password) and I(force_change_pass) when the user is first created.
       This enables mostly idempotent behavior for other parameters without unwanted side effects.
-      Set I(update_password=true) to explicitly update the password of an existing account, or force the user to change their current password.
+      Set I(update_password=true) to explicitly update the password of an existing account,
+      or I(update_force_change_pass=true) to force a user to change their current password.
       Similarly, updates to the I(roles) field can be set to overwrite roles by default or append new roles when I(append_roles=true).
 '''
 
@@ -189,7 +199,9 @@ updated_attrs:
 content:
   description: User attributes as returned by Splunk.  A few highlights have provided below for quick reference.
   type: dict
-  returned: when user is listed, created, or updated.  (Missing for deletion)
+  returned: >-
+    when user is listed, created, or updated.  Upon deletion this is shown too,
+    but subsequent invocations of I(state=absent) will return an empty dictionary.
   contains:
     capabilities:
       description: A list of effectively Splunk capabilities for the user
@@ -292,8 +304,8 @@ EXAMPLES = r'''
     username: admin
     password: "{{ splunk_admin_password }}"
     splunk_user: joe
-    update_password: true
     force_change_pass: true
+    update_force_change_pass: true
 
 - name: Retrieve information about top users
   splunk_user:
@@ -375,6 +387,7 @@ def create_user(module, service, params):
     update_password = params["update_password"]
     append_roles = params["append_roles"]
     force_change_pass = params["force_change_pass"]
+    update_force_change_pass = params["update_force_change_pass"]
 
     output = {}
     changes = {}
@@ -385,8 +398,11 @@ def create_user(module, service, params):
         user = service.users[splunk_user]
     except KeyError:
         user = service.users.create(username=splunk_user, password=splunk_pass,
-                                    roles=roles)
+                                    roles=roles,
+                                    **{"force-change-pass": bool(force_change_pass)})
         atrsupd.extend(["user", "password", "roles"])
+        if force_change_pass:
+            atrsupd.append("force_change_pass")
         updating_user = False
 
     creating_user = not updating_user  # Redundant, but makes logic easier to follow
@@ -396,12 +412,7 @@ def create_user(module, service, params):
         changes["password"] = splunk_pass
         atrsupd.append("password")
 
-    # Force change password is set for (1) new users or (2) in 'update_password' mode.
-    # Further more, only report this as a change if the new value differs from the current value
-    if force_change_pass is not None and (
-            creating_user or
-            (update_password and
-             user["force-change-pass"] != force_change_pass)):
+    if force_change_pass is not None and updating_user and update_force_change_pass:
         changes["force-change-pass"] = force_change_pass
         atrsupd.append("force_change_pass")
 
@@ -503,6 +514,7 @@ def main():
             state=dict(default='present',
                        choices=['present', 'absent', 'list']),
             update_password=dict(type='bool', default=False, no_log=False),
+            update_force_change_pass=dict(type='bool', default=False, no_log=False),
             append_roles=dict(type='bool', default=False),
             # User settings
             splunk_user=dict(required=True),
@@ -542,10 +554,11 @@ def main():
     except Exception as e:
         module.fail_json(msg="Unable to connect to splunkd.  Exception: %s" % e)
 
-    if p["state"] == "present" and p["force_change_pass"] is not None:
-        module.warn(f"{MODULE_NAME} support for 'force_change_pass' is currently broken.  "
-                    "Disregarding that parameter until a solution is found.")
-        p["force_change_pass"] = None
+    if p["state"] in ("present", "absent") and p["username"] == p["splunk_user"]:
+        module.fail_json(
+            msg=f"{MODULE_NAME} does not support updating or removing the login user {p['username']}.")
+        # It technically is possible to update ones own password, but we'd need capture/pass "oldpassword".
+        # Frankly, this doesn't seem very important.  But send a FR/PR if I'm wrong.
 
     try:
         if p["state"] == "present":

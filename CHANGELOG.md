@@ -1,3 +1,6 @@
+## Release 0.20.2 (2023-07-21)
+* `splunk_user`: Got `force_change_pass` working.  The documentation was updated accordingly.
+
 ## Release 0.20.1 (2023-07-21)
 * `splunk_cli`:  Rename the `splunk_uri` option to `splunkd_uri` to be consistent across modules.  Added alias for backwards compatibility.  (Aso fixed an example in the splunk_user docs)
 
