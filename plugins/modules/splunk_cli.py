@@ -20,6 +20,7 @@ from __future__ import absolute_import, division, print_function
 
 import datetime
 import os
+import re
 import shlex
 
 from ansible.module_utils._text import to_text
@@ -39,8 +40,10 @@ short_description: Splunk command line interface
 description:
     - This is a lightweight wrapper around the Splunk CLI that handles auth
       parameter hiding and some other niceties.
-    - If the Splunk command requires authentication, provide the I(username) and
-      I(password) options.
+    - This is a drop-in replacement for M(ansible.builtin.command).
+      When converting, simply replace authenticated calls using C(-auth user:password) to use I(username) and (password) module options.
+      Additional sensitive arguments can be protected too using I(hidden_args).
+    - Calls to remote splunkd instance can be handled by specifying I(splunk_uri).
 version_added: "0.9.0"
 author: Lowell C. Alleman (@lowell80)
 
@@ -60,7 +63,7 @@ attributes:
       support: full
       platforms: posix
     raw:
-      support: full
+      support: none
 
 options:
     splunkd_uri:
@@ -106,24 +109,29 @@ options:
     splunk_home:
         description:
             - The Splunk installation home.  $SPLUNK_HOME
-        required: true
+            - This value is required unless the first argument to I(cmd) is the absolute path
+              to the splunk executable (often C(/opt/splunk/bin/splunk))
+        required: false
         default: /opt/splunk
 
     cmd:
         description:
             - Command line arguments to the Splunk CLI
+            - The initial C(splunk) command is optional as long as C(splunk_home) is provided.
         required: true
         default: null
 
-#notes:
+notes:
+    - As of v0.20.0 it's now possible to pass in the full path to splunk in I(cmd) and thus
+      avoid providing I(splunk_home).
+      This allows for a closer match-up with the the builtin command module.
 '''
 
 EXAMPLES = r'''
 
 - name: Reload the deployment server
   cdillc.splunk.splunk_cli:
-    cmd: reload deploy-server
-    splunk_home: "{{splunk_home}}"
+    cmd: "{{splunk_home}}/bin/splunk reload deploy-server"
     username: "{{splunk_admin_user}}"
     password: "{{splunk_admin_pass}}"
 
@@ -163,20 +171,20 @@ def main():
     # Therefore cmd="..." syntax must be use.
     module = AnsibleModule(
         argument_spec=dict(
-            cmd=dict(),
-            splunk_home=dict(required=True),
-            splunk_uri=dict(default=None, aliases=["uri", "splunkd_uri"]),
-            username=dict(default=None),
-            password=dict(default=None, no_log=True),
+            cmd=dict(type="str", required=True),
+            splunk_home=dict(required=False, type="str"),
+            splunk_uri=dict(default=None, type="str", aliases=["uri", "splunkd_uri"]),
+            username=dict(default=None, type="str"),
+            password=dict(default=None, type="str", no_log=True),
             # token=dict(default=None, no_log=True),
             hidden_args=dict(type="dict", default=None, no_log=True),
             # Borrowed from the shell/command module
-            creates=dict(default=None),
-            removes=dict(default=None),
-            create_on_success=dict(default=None),
+            creates=dict(default=None, type="str"),
+            removes=dict(default=None, type="str"),
+            create_on_success=dict(type="bool", default=None),
         )
     )
-    args = module.params["cmd"]
+    cmd = module.params["cmd"]
     splunk_home = module.params["splunk_home"]
     splunk_uri = module.params['splunk_uri']
     splunk_user = module.params['username']
@@ -189,10 +197,38 @@ def main():
     if (splunk_user or splunk_pass) and not (splunk_user and splunk_pass):
         module.fail_json(msg="Both 'username' and 'password' must be specified at the same time.")
 
-    if args.strip() == '':
+    if cmd.strip() == '':
         module.fail_json(rc=256, msg="no command given")
 
-    splunk_home = os.path.abspath(os.path.expanduser(splunk_home))
+    try:
+        args = shlex.split(cmd)
+    except ValueError as e:
+        module.fail_json(msg=f"Failed to parse command into arguments.  {e}  "
+                             f"cmd={args!r}")
+
+    if "-auth" in args:
+        # In a later version this should be an error
+        module.warn("Found '-auth' in cmd.  Please use the 'username' and 'password' module "
+                    "arguments instead.  In the future this will trigger a failure.")
+
+    if splunk_home:
+        splunk_home = os.path.abspath(os.path.expanduser(splunk_home))
+
+    match = e.match(r'(.+)/bin/splunkd?$', args[0])
+    if match:
+        splunk_home2 = os.path.abspath(os.path.expanduser(match.group(1)))
+        if splunk_home and splunk_home != splunk_home2:
+            module.warning(f"Splunk home disagreement:  splunk_home shows '{splunk_home}', "
+                           f"but cmd indicates '{splunk_home2}'.  Using the later.")
+        splunk_home = splunk_home2
+        executable = args[0]
+    elif not splunk_home:
+        module.fail_json(msg=f"No known value for splunk_home!  Must provide 'splunk_home' "
+                         "or full path to splunk executable via 'cmd'")
+    else:
+        # Make sure that 'splunk' is the first argument
+        args.insert(0, os.path.join(splunk_home, "bin", "splunk"))
+        executable = os.path.join(splunk_home, "bin", "splunk")
 
     # Q: Why chdir to splunk home, should the caller have control of this?
     try:
@@ -223,19 +259,6 @@ def main():
                 stderr=False
             )
 
-    try:
-        args = shlex.split(args)
-    except ValueError as e:
-        module.fail_json(msg=f"Failed to parse command into arguments.  {e}  "
-                             f"cmd={args!r}")
-
-    executable = os.path.join(splunk_home, "bin", "splunk")
-    start_time = datetime.datetime.now()
-
-    # Make sure that 'splunk' is the first argument
-    if args[0] != "splunk":
-        args.insert(0, "splunk")
-
     if splunk_user:
         args.append("-auth")
         args.append("%s:%s" % (splunk_user, splunk_pass))
@@ -251,6 +274,8 @@ def main():
                 arg = "-" + arg
             args.append(arg)
             args.append(to_text(value))
+
+    start_time = datetime.datetime.now()
 
     rc, out, err = module.run_command(args, executable=executable, use_unsafe_shell=False)
 

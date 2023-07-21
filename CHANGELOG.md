@@ -1,11 +1,13 @@
-## Release 0.19.5 (2023-07-21)
+## Release 0.20.0 (2023-07-21)
+* `splunk_cli`: Allow full splunk path in `cmd` so that the `splunk_home` argument isn't needed.
+  This arguably feels more natural and is more of a drop-in replacement for the command module.
 * `splunk_user`: Started to add support for `force_change_pass` argument which sets the `force-change-pass` Splunk REST parameter.
   This currently is NOT working, but there were a enough documentation updates to justify putting the updated code into place.
 * `asis`: Add support for overriding output by setting an output field named: `priority_msg`.
   Additionally, any task marked with "no_log" is silently bypassed from the output.
 
 ## Release 0.19.4 (2023-07-20)
-* Add the most basic stdout callback handler ever `asis`` which simply dumps any 'stdout', 'stderr', and 'msg' fields with minimal no formatting.  All other result fields are disregarded.
+* Add the most basic stdout callback handler ever `asis` which simply dumps any 'stdout', 'stderr', and 'msg' fields with minimal no formatting.  All other result fields are disregarded.
 
 ## Release 0.19.3 (2023-07-19)
 * `splunk_cli`:
