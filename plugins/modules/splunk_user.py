@@ -526,6 +526,8 @@ def main():
     if client is None:
         module.fail_json(msg='splunk-sdk required for this module')
 
+    from splunklib.binding import HTTPError
+
     if not ((p["username"] and p["password"]) or p["token"]):
         module.fail_json(msg="%s requires either (1) 'username' and 'password' parameters, "
                              "or (2) token parameter for Splunkd authentication" % (MODULE_NAME,))
@@ -545,14 +547,17 @@ def main():
                     "Disregarding that parameter until a solution is found.")
         p["force_change_pass"] = None
 
-    if p["state"] == "present":
-        output = create_user(module, service, module.params)
-    elif p["state"] == "absent":
-        output = delete_user(module, service, module.params)
-    elif p["state"] == "list":
-        output = list_user(module, service, module.params)
-    else:
-        module.fail_json(msg="Unsupported state of '%s'" % p["state"])
+    try:
+        if p["state"] == "present":
+            output = create_user(module, service, module.params)
+        elif p["state"] == "absent":
+            output = delete_user(module, service, module.params)
+        elif p["state"] == "list":
+            output = list_user(module, service, module.params)
+        else:
+            module.fail_json(msg="Unsupported state of '%s'" % p["state"])
+    except HTTPError as e:
+        module.fail_json(msg=f"Error returned from splunkd: {e}", rc=5)
 
     # For convenience, pass along some of the input parameters
     # Add auth 'token' which can be used for subsequent calls in the same play.
