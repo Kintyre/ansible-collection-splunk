@@ -43,7 +43,7 @@ description:
     - This is a drop-in replacement for M(ansible.builtin.command).
       When converting, simply replace authenticated calls using C(-auth user:password) to use I(username) and (password) module options.
       Additional sensitive arguments can be protected too using I(hidden_args).
-    - Calls to remote splunkd instance can be handled by specifying I(splunk_uri).
+    - Calls to remote splunkd instance can be handled by specifying I(splunkd_uri).
 version_added: "0.9.0"
 author: Lowell C. Alleman (@lowell80)
 
@@ -173,7 +173,7 @@ def main():
         argument_spec=dict(
             cmd=dict(type="str", required=True),
             splunk_home=dict(required=False, type="str"),
-            splunk_uri=dict(default=None, type="str", aliases=["uri", "splunkd_uri"]),
+            splunkd_uri=dict(default=None, type="str", aliases=["uri", "splunk_uri"]),
             username=dict(default=None, type="str"),
             password=dict(default=None, type="str", no_log=True),
             # token=dict(default=None, no_log=True),
@@ -186,7 +186,7 @@ def main():
     )
     cmd = module.params["cmd"]
     splunk_home = module.params["splunk_home"]
-    splunk_uri = module.params['splunk_uri']
+    splunkd_uri = module.params['splunkd_uri']
     splunk_user = module.params['username']
     splunk_pass = module.params['password']
     creates = module.params['creates']
@@ -263,10 +263,10 @@ def main():
         args.append("-auth")
         args.append("%s:%s" % (splunk_user, splunk_pass))
 
-    if splunk_uri:
+    if splunkd_uri:
         # Tell splunk CLI to issue command to remote Splunk instance
         args.append("-uri")
-        args.append(splunk_uri)
+        args.append(splunkd_uri)
 
     if hidden_args:
         for arg, value in hidden_args.items():

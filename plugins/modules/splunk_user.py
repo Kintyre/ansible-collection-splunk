@@ -253,7 +253,7 @@ EXAMPLES = r'''
 - name: Create a new user remotely
   cdillc.splunk.splunk_user:
     state: present
-    splunk_uri: "https://{{ ansible_fqdn }}:{{ splunkd_port}}"
+    splunkd_uri: "https://{{ ansible_fqdn }}:{{ splunkd_port}}"
     username: "{{ splunk_admin_username }}"
     password: "{{ splunk_admin_password }}"
     splunk_user: bob
