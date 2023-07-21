@@ -1,6 +1,8 @@
 ## Release 0.19.5 (2023-07-21)
-* `splunk_user`: Add support for `force_change_pass` argument which sets the `force-change-pass` Splunk REST paramater.
-* `asis`: Add support for overriding output by setting an output field named: `priority_msg`.  Also attempted to block "no_log" tasks from being displayed.
+* `splunk_user`: Started to add support for `force_change_pass` argument which sets the `force-change-pass` Splunk REST parameter.
+  This currently is NOT working, but there were a enough documentation updates to justify putting the updated code into place.
+* `asis`: Add support for overriding output by setting an output field named: `priority_msg`.
+  Additionally, any task marked with "no_log" is silently bypassed from the output.
 
 ## Release 0.19.4 (2023-07-20)
 * Add the most basic stdout callback handler ever `asis`` which simply dumps any 'stdout', 'stderr', and 'msg' fields with minimal no formatting.  All other result fields are disregarded.

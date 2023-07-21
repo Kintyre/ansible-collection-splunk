@@ -240,7 +240,7 @@ endpoint:
 
 EXAMPLES = r'''
 - name: Create a new user named 'bob'
-  splunk_user:
+  cdillc.splunk.splunk_user::
     state: present
     username: admin
     password: "{{ splunk_admin_password }}"
@@ -249,8 +249,22 @@ EXAMPLES = r'''
     roles: user,admin
     tz: America/New_York
 
+# Run splunk_user on the controller if missing splunksdk on targets
+- name: Create a new user remotely
+  cdillc.splunk.splunk_user:
+    state: present
+    splunk_uri: "https://{{ ansible_fqdn }}:{{ splunkd_port}}"
+    username: "{{ splunk_admin_username }}"
+    password: "{{ splunk_admin_password }}"
+    splunk_user: bob
+    splunk_pass: aReallyGoodPassword
+    roles:
+     - user
+     - admin
+  delegate_to: localhost
+
 - name: Add bob to the 'delete_stuff' role.  (existing roles are preserved)
-  splunk_user:
+  cdillc.splunk.splunk_user::
     username: admin
     password: "{{ splunk_admin_password }}"
     splunk_user: bob
@@ -258,14 +272,14 @@ EXAMPLES = r'''
     append_roles: true
 
 - name: Terminate bob after data deletion incident
-  splunk_user:
+  cdillc.splunk.splunk_user::
     state: absent
     username: admin
     password: "{{ splunk_admin_password }}"
     splunk_user: bob
 
 - name: Change the password of existing user 'joe'
-  splunk_user:
+  cdillc.splunk.splunk_user::
     username: admin
     password: "{{ splunk_admin_password }}"
     splunk_user: joe
@@ -292,7 +306,6 @@ EXAMPLES = r'''
      - bob
      - joe
      - henry
-
 '''
 
 
@@ -389,7 +402,7 @@ def create_user(module, service, params):
             creating_user or
             (update_password and
              user["force-change-pass"] != force_change_pass)):
-        user["force-change-pass"] = force_change_pass
+        changes["force-change-pass"] = force_change_pass
         atrsupd.append("force_change_pass")
 
     # Look at individual parameter values and update as necessary
@@ -526,6 +539,11 @@ def main():
                           p['password'], p['token'], sharing="system")
     except Exception as e:
         module.fail_json(msg="Unable to connect to splunkd.  Exception: %s" % e)
+
+    if p["force_change_pass"] is not None:
+        module.warn(msg=f"{MODULE_NAME} support for 'force_change_pass' is currently broken.  "
+                    "Disregarding that parameter until a solution is found.")
+        p["force_change_pass"] = None
 
     if p["state"] == "present":
         output = create_user(module, service, module.params)
