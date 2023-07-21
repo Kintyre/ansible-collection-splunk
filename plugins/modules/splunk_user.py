@@ -52,7 +52,6 @@ options:
         description:
             - Splunk username for username/password authentication to Splunkd.
             - When provided, I(password) must also be specified.
-            - Use the I(splunk_user) option for Splunk user being created, updated, or removed.
         required: false
         default: null
 
@@ -60,7 +59,6 @@ options:
         description:
             - The password for username/password authentication to Splunkd.
             - Must be provided if I(username) is provided.
-            - Use the I(splunk_pass) for the password to the Splunk user being created or updated.
         required: false
         default: null
 
@@ -83,32 +81,27 @@ options:
     state:
         description:
             - Ensure the user is either present or absent; or list the contents of the user's configuration.
-            - Users that already existing will be updated as specified, except for I(splunk_pass).
-            - The C(content) output contains the final setting.
-            - If the state is absent, the C(content) output will be missing
-              if the stanza was previously removed.
+            - With C(present), existing users are updated in place.  See notes regarding specific handling of the I(roles), I(splunk_pass), and I(force_change_pass).
         required: false
         default: present
         choices: [present, absent, list]
 
     update_password:
         description:
-            - Replace the existing password with the one specified.
-            - The default is to only set the password when the user is created.
-            - When enabled, the result of this module will always report as
+            - Replace the existing password with the one specified in I(password) or force a password change using I(force_change_pass)
+            - When using this to change I(password) this this module will always report as
               changed since there is no way to determine if the new password is
               different than the currently assigned password.
         required: false
         default: false
-        choices: [ true, false ]
+        type: bool
 
     append_roles:
         description:
             - When true, the specified I(roles) will be appended to the user's existing roles.
-            - Otherwise, the roles will be replaced as-is.
         required: false
         default: false
-        choices: [ true, false ]
+        type: bool
 
     splunk_user:
         description:
@@ -127,7 +120,9 @@ options:
 
     roles:
         description:
-            - Comma separated list of role associated with the Splunk user.
+            - List of roles associated with the Splunk user.
+            - By default this will override any users existing role membership.
+              Use I(append_roles=true) to change this behavior to be additive.
         type: list
         elements: str
         required: true
@@ -162,17 +157,23 @@ options:
 
     force_change_pass:
         description:
-            - Force user to change password.  This field is only set when the user is first created.
+            - Force user to change password.  This field is set when the user is first created or when I(update_password=true).
         required: false
         default: null
         type: bool
+
+notes:
+    - The default behavior of this module will only set I(password) and I(force_change_pass) when the user is first created.
+      This enables mostly idempotent behavior for other parameters without unwanted side effects.
+      Set I(update_password=true) to explicitly update the password of an existing account, or force the user to change their current password.
+      Similarly, updates to the I(roles) field can be set to overwrite roles by default or append new roles when I(append_roles=true).
 '''
 
 RETURN = r'''
 result:
   description:
     - The overall result of the module run.
-    - Options include C(created), C(updated), C(deleted), or C(unchanged)
+    - Options include C(created), C(updated), C(deleted), or C(unchanged).
   returned: always
   type: str
   sample: updated
@@ -180,16 +181,61 @@ token:
   description:
     - The Splunk auth token created used for the REST API calls.
     - This value can be passed into I(token) of a subsequent REST-based operation.
+  type: str
+  returned: always
 updated_attrs:
   description: A list of attributes that were set.
   type: list
 content:
-  description: User attributes as returned by Splunk.
+  description: User attributes as returned by Splunk.  A few highlights have provided below for quick reference.
   type: dict
+  returned: when user is listed, created, or updated.  (Missing for deletion)
+  contains:
+    capabilities:
+      description: A list of effectively Splunk capabilities for the user
+      type: list
+      elements: str
+      sample: [search, install_apps, ...]
+    defaultApp:
+      type: str
+    email:
+      type: str
+    relname:
+      description: Real user name
+      type: str
+    restart_background_jobs:
+      type: str
+    roles:
+      description: Splunk roles assigned to user.
+      sample: [user, power]
+    search_assistant:
+      type: str
+      sample: compact
+    search_auto_format:
+      type: str
+      sample: "0"
+    search_line_numbers:
+      type: str
+      sample: "0"
+    search_syntax_highlighting:
+      type: str
+      sample: light
+    search_use_advanced_editor:
+      type: str
+      sample: "1"
+    theme:
+      type: str
+      sample: enterprise
+    locked-out:
+      type: str
+      sample: "0"
+    tz:
+      type: str
+      description: Time zone
 endpoint:
   description: URL used to edit the user object
   type: str
-
+  returned: always
 '''
 
 EXAMPLES = r'''
@@ -197,20 +243,56 @@ EXAMPLES = r'''
   splunk_user:
     state: present
     username: admin
-    password: manage
+    password: "{{ splunk_admin_password }}"
     splunk_user: bob
     splunk_pass: aReallyGoodPassword
     roles: user,admin
     tz: America/New_York
 
+- name: Add bob to the 'delete_stuff' role.  (existing roles are preserved)
+  splunk_user:
+    username: admin
+    password: "{{ splunk_admin_password }}"
+    splunk_user: bob
+    roles: delete_stuff
+    append_roles: true
+
+- name: Terminate bob after data deletion incident
+  splunk_user:
+    state: absent
+    username: admin
+    password: "{{ splunk_admin_password }}"
+    splunk_user: bob
+
 - name: Change the password of existing user 'joe'
   splunk_user:
-    state: present
-    update_password: true
     username: admin
-    password: manage
+    password: "{{ splunk_admin_password }}"
     splunk_user: joe
     splunk_pass: NewPassWord
+    update_password: true
+
+- name: Force existing user 'joe' to change their password at next login
+  splunk_user:
+    splunkd_uri: https://splunk-sh01.megacorp.example:8089
+    username: admin
+    password: "{{ splunk_admin_password }}"
+    splunk_user: joe
+    update_password: true
+    force_change_pass: true
+
+- name: Retrieve information about top users
+  splunk_user:
+    state: list
+    username: admin
+    password: "{{ splunk_admin_password }}"
+    splunk_user: "{{ item }}
+   register: user_info
+   loop:
+     - bob
+     - joe
+     - henry
+
 '''
 
 
@@ -284,22 +366,31 @@ def create_user(module, service, params):
     output = {}
     changes = {}
     atrsupd = []
-    created = False
+    updating_user = True    # Updating an existing user account
 
     try:
         user = service.users[splunk_user]
-        if update_password:
-            changes["password"] = splunk_pass
-            atrsupd.append("password")
     except KeyError:
-        extras = {}
-        if force_change_pass is not None:
-            extras["force-change-pass"] = force_change_pass
-            atrsupd.append("force_change_pass")
         user = service.users.create(username=splunk_user, password=splunk_pass,
-                                    roles=roles, **extras)
+                                    roles=roles)
         atrsupd.extend(["user", "password", "roles"])
-        created = True
+        updating_user = False
+
+    creating_user = not updating_user  # Redundant, but makes logic easier to follow
+
+    # Update password for existing user, but only in 'update_password' mode, and if the password was provided
+    if updating_user and update_password and splunk_pass:
+        changes["password"] = splunk_pass
+        atrsupd.append("password")
+
+    # Force change password is set for (1) new users or (2) in 'update_password' mode.
+    # Further more, only report this as a change if the new value differs from the current value
+    if force_change_pass is not None and (
+            creating_user or
+            (update_password and
+             user["force-change-pass"] != force_change_pass)):
+        user["force-change-pass"] = force_change_pass
+        atrsupd.append("force_change_pass")
 
     # Look at individual parameter values and update as necessary
     if roles and set(roles) != set(user.roles):
@@ -326,14 +417,14 @@ def create_user(module, service, params):
         atrsupd.append("defaultApp")
 
     output["result"] = "unchanged"
-    if created:
+    if creating_user:
         output["changed"] = True
         output["result"] = "created"
 
     if changes:
         user.update(**changes).refresh()
         output["changed"] = True
-        if not created:
+        if updating_user:
             output["result"] = "updated"
 
     output["updated_attrs"] = atrsupd
@@ -402,7 +493,7 @@ def main():
             append_roles=dict(type='bool', default=False),
             # User settings
             splunk_user=dict(required=True),
-            splunk_pass=dict(default=None, no_log=True),
+            splunk_pass=dict(default=None, type="str", no_log=True),
             roles=dict(type="list", elements="str", default=["user"]),
             tz=dict(default=None),
             realname=dict(default=None),
@@ -425,6 +516,10 @@ def main():
     if not ((p["username"] and p["password"]) or p["token"]):
         module.fail_json(msg="%s requires either (1) 'username' and 'password' parameters, "
                              "or (2) token parameter for Splunkd authentication" % (MODULE_NAME,))
+
+    if p["state"] == "present" and p["update_password"] and not p["splunk_pass"] and p["force_change_pass"] is None:
+        module.fail_json(msg=f"{MODULE_NAME} requires setting either (1) 'splunk_pass' or "
+                         "(2) 'force_change_pass' when in 'update_password' mode.")
 
     try:
         service = connect(module, p['splunkd_uri'], p['username'],

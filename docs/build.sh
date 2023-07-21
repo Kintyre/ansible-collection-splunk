@@ -9,21 +9,23 @@ pushd "$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 trap "{ popd; }" EXIT
 
 # Create collection documentation into temporary directory
-rm -rf temp-rst
-mkdir -p temp-rst
-chmod og-w temp-rst  # antsibull-docs wants that directory only readable by itself
+rm -rf rst
+mkdir -p rst
+chmod og-w rst  # antsibull-docs wants that directory only readable by itself
 antsibull-docs \
     --config-file antsibull-docs.cfg \
     collection \
     --use-current \
-    --dest-dir temp-rst \
+    --dest-dir rst \
     cdillc.splunk
 
 # Copy collection documentation into source directory
-rsync -cprv --delete-after temp-rst/collections/ rst/collections/
+rsync -cprv --delete-after rst/collections/ rst/collections/
 
 # Build Sphinx site
 cp -a index.rst rst/index.rst
 sphinx-build -M html rst build -c . -W --keep-going
 
 echo Exit code: $?
+
+echo "View docs at:  file://$PWD/build/html/index.html"
