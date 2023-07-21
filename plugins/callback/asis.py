@@ -20,6 +20,8 @@ DOCUMENTATION = '''
     version_added: v0.19.4
     description:
         - This output callback will simply dump the values of C(stdout), C(stderr), and C(msg) fields to the screen, as is.
+        - Setting the 'no_log' directive on a task will hide it from the output entiirely.
+        - Failures and warnings are still displayed.  These are borrowed from the 'minimal' callback plugin.
 '''
 
 
@@ -81,8 +83,9 @@ class CallbackModule(CallbackBase):
             state = 'SUCCESS'
 
         priority_msg = result._result.get("priority_msg", "")
-        if result._result.get("no_log", None):
-            # Not sure how to check if "no_log" was set on the module paramaters....
+        censored = result._result.get("censored", "")
+        if "no_log" in censored:
+            # NO output
             pass
         elif priority_msg:
             self._display.display(priority_msg, color=color)
