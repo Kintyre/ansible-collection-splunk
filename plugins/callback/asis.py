@@ -40,8 +40,12 @@ class CallbackModule(CallbackBase):
         buf = ["%s | %s | rc=%s >>\n" % (host, caption, result.get('rc', -1))]
 
         def add(s):
+            if isinstance(s, (list, tuple)):
+                buf.append("\n".join(str(i) for i in s) + "\n")
+                return
+            s = str(s)
             buf.append(s)
-            if s and not s.endswith("\n"):
+            if s and isinstance(s, str) and not s.endswith("\n"):
                 buf.append("\n")
 
         add(result.get('stdout', ''))
