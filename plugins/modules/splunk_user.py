@@ -398,7 +398,7 @@ def main():
             # Settings for module behavior
             state=dict(default='present',
                        choices=['present', 'absent', 'list']),
-            update_password=dict(type='bool', default=False),
+            update_password=dict(type='bool', default=False, no_log=False),
             append_roles=dict(type='bool', default=False),
             # User settings
             splunk_user=dict(required=True),
@@ -408,7 +408,7 @@ def main():
             realname=dict(default=None),
             defaultapp=dict(default=None),
             email=dict(default=None),
-            force_change_pass=dict(default=None, type="bool")
+            force_change_pass=dict(default=None, type="bool", no_log=False)
         ),
     )
 
