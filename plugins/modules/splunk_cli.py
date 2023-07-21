@@ -214,7 +214,7 @@ def main():
     if splunk_home:
         splunk_home = os.path.abspath(os.path.expanduser(splunk_home))
 
-    match = e.match(r'(.+)/bin/splunkd?$', args[0])
+    match = re.match(r'(.+)/bin/splunkd?$', args[0])
     if match:
         splunk_home2 = os.path.abspath(os.path.expanduser(match.group(1)))
         if splunk_home and splunk_home != splunk_home2:
