@@ -204,7 +204,7 @@ def main():
         args = shlex.split(cmd)
     except ValueError as e:
         module.fail_json(msg=f"Failed to parse command into arguments.  {e}  "
-                             f"cmd={args!r}")
+                             f"cmd={cmd!r}")
 
     if "-auth" in args:
         # In a later version this should be an error
