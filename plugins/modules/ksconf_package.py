@@ -35,7 +35,7 @@ description:
 version_added: "0.10.0"
 author: Lowell C. Alleman (@lowell80)
 requirements:
-    - ksconf>=0.11.4
+    - ksconf>=0.11.5
 
 extends_documentation_fragment: action_common_attributes
 
@@ -117,15 +117,20 @@ options:
 
     enable_handler:
         description:
-            - Enable one or more file handlers for template expansion.
-              Currently support is limited to Jinja templates.
+            - Enable one or more file handlers for template expansion and encrypted file support.
             - Use C(jinja) for basic Jinja2 syntax support.
               All necessary variables must be passed in via the I(template_vars) argument.
             - Use C(ansible-jinja) to use the Ansible engine to handle all jinja rendering.
               By default, all Ansible variables, filters, tests, and lookups are available.
               This is effectively like using the M(ansible.builtin.template) module to render all
               C(*.j2) files before packaging an app.
+            - Use C(ansible-vault) to enable ansible vault decryption of files.
+              This will only decrypt files matching C(*.vault).
         type: list
+        choices:
+          - ansible-jinja
+          - ansible-vault
+          - jinja
         elements: str
 
     template_vars:
@@ -146,6 +151,16 @@ options:
             - Use this to pass around important app context variables that can
               be conveniently retained when looping and using C(register).
         type: dict
+
+    encrypt:
+        description:
+            - Encrypt the resulting archive I(file).
+              Set to C(vault) to encrypt with ansible-vault.
+        type: str
+        default: false
+        choices:
+            - false
+            - vault
 
 # set_version
 # set_build
@@ -195,6 +210,8 @@ app_name:
 action:
   description: >
     Resulting action code.  Values are C(created), C(updated), or C(unchanged).
+    If I(encrypt) has changed, without any changes in I(source), then actions
+    will be either C(encrypt) and C(decrypt).
   type: str
   returned: always
   sample: unchanged
@@ -210,6 +227,18 @@ archive_size:
     type: int
     returned: always
     sample:
+
+encryption:
+    description: Final encryption state of the archive.
+    type: str
+    returned: always
+    sample: vault
+
+encryption_size:
+    description: Size of file on disk, after encryption.
+    type: int
+    returned: if I(encrypt) is enabled
+
 stdout:
     description: Output stream of details from the ksconf packaging operations.
     type: str

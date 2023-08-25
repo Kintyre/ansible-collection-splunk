@@ -6,6 +6,9 @@ __metaclass__ = type
 
 import os
 import re
+from contextlib import contextmanager
+from pathlib import Path
+from random import randint
 
 from ansible.module_utils.basic import AnsibleModule
 
@@ -82,3 +85,25 @@ def check_ksconf_version(module: AnsibleModule = None) -> tuple:
         else:
             display.warning(message)
         return 0, 0, 0, ksconf_version
+
+
+@contextmanager
+def temp_decrypt(encrypted_file: Path, vault, *, clone_mtime=False, log_callback=None):
+    from ansible.parsing.vault import VaultEditor
+    from ksconf.util.file import secure_delete
+    if log_callback is None:
+        def log_callback(s): pass
+
+    vault_editor = VaultEditor(vault)
+    decrypted_file = encrypted_file.with_name(encrypted_file.name +
+                                              f".decrypted-{os.getpid()}-{randint(0, 999999)}")
+    assert not decrypted_file.is_file()
+    log_callback(f"temp_decrypt:  Decrypting vault file {encrypted_file} -> {decrypted_file}")
+    vault_editor.decrypt_file(encrypted_file, decrypted_file)
+    if clone_mtime:
+        stat = encrypted_file.stat()
+        os.utime(decrypted_file, (stat.st_atime, stat.st_mtime))
+    yield decrypted_file
+
+    log_callback(f"temp_decrypt:  Removing decrypted file {decrypted_file}")
+    secure_delete(decrypted_file)

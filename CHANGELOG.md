@@ -1,3 +1,7 @@
+## Release 0.21.0 (2023-08-25)
+* `ksconf_package`: Add ability to decrypt vaulted source files with `enable_handler=ansible-vault` and encrypted the generated tarballs using `encrypt=vault`.
+* The controller node now requires ksconf v0.11.5 or later.
+
 ## Release 0.20.2 (2023-07-21)
 * `splunk_user`: Got `force_change_pass` working.  The documentation was updated accordingly.
 
