@@ -382,19 +382,21 @@ def main():
     res_args, files, state_file = ksconf_sideload_app(src, dest, src_orig=src_orig)
 
     if res_args.get('diff', True) and not module.check_mode:
-        # do we need to change perms?
         # Reset permissions on all files (mode,owner,group,attr,se*)
 
-        # Note:  Inject parent directories into the list since directories aren't in the manifest
-        for filename in calc_missing_parent_dirs(files):
-            file_args['path'] = os.path.join(b_dest, to_bytes(
-                filename, errors='surrogate_or_strict'))
-            try:
-                res_args['changed'] = module.set_fs_attributes_if_different(
-                    file_args, res_args['changed'], expand=False)
-            except (IOError, OSError) as e:
-                module.fail_json(msg=f"Unexpected error settings permissions for {filename}: {e}",
-                                 **res_args)
+        # Only apply path changes if mode/owner/group was set
+        if any(file_args.get(a, None) for a in ('mode', 'owner', 'group')):
+            # Note:  Inject parent directories into the list as directories aren't in the manifest
+            for filename in calc_missing_parent_dirs(files):
+                file_args['path'] = os.path.join(b_dest, to_bytes(
+                    filename, errors='surrogate_or_strict'))
+                try:
+                    res_args['changed'] = module.set_fs_attributes_if_different(
+                        file_args, res_args['changed'], expand=False)
+                except (IOError, OSError) as e:
+                    module.fail_json(
+                        msg=f"Unexpected error settings permissions for {filename}: {e}",
+                        **res_args)
 
     if list_files:
         res_args["files"] = files
