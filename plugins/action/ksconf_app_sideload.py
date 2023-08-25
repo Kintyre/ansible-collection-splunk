@@ -40,7 +40,7 @@ class ActionModule(ActionBase):
         The remote json file must be copied to a temporary named file to be
         parsed locally.
         """
-        display.vvv(u"JSON state file={0}".format(path))
+        display.vvv(f"JSON state file={path}")
         with NamedTemporaryFile("rb+") as temp_f:
             try:
                 self._connection.fetch_file(path, temp_f.name)
@@ -61,14 +61,13 @@ class ActionModule(ActionBase):
                     if slurp_msg.startswith("file not found:"):
                         # No need to show a message
                         return {}
-                    display.vv(u"Failed to fetch JSON state using slurp.  "
-                               u"file={0} msg={1} first_exception={2}".format(
-                                   path, slurp_msg, to_text(e)))
+                    display.vv("Failed to fetch JSON state using slurp.  "
+                               f"file={path} msg={slurp_msg} first_exception={e}")
                     return {}
                 else:
-                    display.v(u"Found JSON state file={0} using slurp!".format(path))
+                    display.v(f"Found JSON state file={path} using slurp!")
 
-                    if slurp_res['encoding'] == u'base64':
+                    if slurp_res['encoding'] == 'base64':
                         temp_f.write(b64decode(slurp_res['content']))
 
             temp_f.seek(0)
@@ -80,7 +79,7 @@ class ActionModule(ActionBase):
                 d = d.copy()
                 if "manifest" in data:
                     d["manifest"] = d["manifest"].copy()
-                    d["manifest"]["files"] = f"Removing {len(data['manifest']['files'])} files ...."
+                    d["manifest"]["files"] = f"Total of {len(data['manifest']['files'])} files ...."
             display.vvv(f"JSON state file={path} data={d!r}")
 
             return data
@@ -91,7 +90,6 @@ class ActionModule(ActionBase):
             if "manifest" not in data:
                 # Possible upgrade scenario.  Nothing we can do but fresh install
                 return None, data
-            # manifest_data = data.pop("manifest")
             return AppManifest.from_dict(data.pop("manifest")), data
         except json.decoder.JSONDecodeError as e:
             display.warning(f"Remote JSON state file {state_file} is corrupt.  "
