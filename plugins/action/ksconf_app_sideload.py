@@ -125,16 +125,23 @@ class ActionModule(ActionBase):
             source = os.path.expanduser(source)
 
             try:
-                # DataLoader.get_real_file will simply decrypt a vault-protected file (So we could likely skip this)
-                source = self._loader.get_real_file(self._find_needle('files', source),
-                                                    decrypt=decrypt)
+                # Q: Do we really want loose path finding behavior of _find_needle()?
+                #    It seems like the path should be typically known.
+                real_source = self._find_needle('files', source)
+                source = self._loader.get_real_file(real_source, decrypt=decrypt)
+
+                # Copy file timestamp as manifest process checks for mtime changes
+                stat = os.stat(real_source)
+                os.utime(source, (stat.st_atime, stat.st_mtime))
+
             except AnsibleError as e:
                 raise AnsibleActionFail(to_text(e))
 
             # Get hash of local archive.  This is cached between runs to reduce overhead.
             try:
                 # This requires writing to the controller's filesystem along side `source`
-                app_manifest = load_manifest_for_archive(source)
+                # Source should be relative to the real file (not the temporary decrypted one)
+                app_manifest = load_manifest_for_archive(source, permanent_archive=real_source)
             except AppArchiveContentError as e:
                 raise AnsibleActionFail(f"Unable to process tarball {source} due to {e}")
 
@@ -146,6 +153,7 @@ class ActionModule(ActionBase):
                 }
                 '''
                 # Pull back remote sideload state data, if present
+                # TODO: Check ansible facts first (Does this need an override parameter to skip?)
                 state_file = os.path.join(dest, app_manifest.name, SIDELOAD_STATE_FILE)
                 remote_manifest, remote_state = self.fetch_remote_manifest(state_file, task_vars)
 

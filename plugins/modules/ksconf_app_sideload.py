@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 #
 # MODULE:  (This runs on the target node)
@@ -27,7 +28,7 @@ from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import
 __metaclass__ = type
 
 ksconf_min_version = (0, 11)
-ksconf_warn_version = (0, 11, 4)
+ksconf_warn_version = (0, 11, 5)
 
 ksconf_min_version_text = ".".join(f"{i}" for i in ksconf_min_version)
 ksconf_warn_version_text = ".".join(f"{i}" for i in ksconf_warn_version)
@@ -225,7 +226,6 @@ def calc_missing_parent_dirs(paths):
     """
     known_dirs = set()
     for path in paths:
-        # Note:  Pretend like all paths are absolute, so that `.parent`
         path = PurePath(path)
         assert not path.is_absolute(), f"Path {path} is not a relative path!"
         parent = path.parent
@@ -297,7 +297,7 @@ def ksconf_sideload_app(src, dest, src_orig=None):
 
     # Don't rely on this to be stable.... more work to be done here.  Eventually want to report on what actually
     # happened, not just the deployment plan (sequence)
-    result["files_changed"] = defaultdict(list)
+    files_changed = result["files_changed"] = defaultdict(list)
     result["file_change_counts"] = {}
     for type_, actions in seq.actions_by_type.items():
         type_ = str(type_)
@@ -305,9 +305,16 @@ def ksconf_sideload_app(src, dest, src_orig=None):
 
     for action in seq.actions:
         if action.action in (DeployActionType.EXTRACT_FILE, DeployActionType.REMOVE_FILE):
-            result["files_changed"][str(action.action)].append(os.fspath(action.path))
+            files_changed[str(action.action)].append(os.fspath(action.path))
 
-    with open(state_file, "w") as marker_f:
+    try:
+        # Added in ksconf v0.11.5
+        from ksconf.util.file import atomic_open
+        f_context = atomic_open(state_file, mode="w", temp_name="tmp.sideload")
+    except ImportError:
+        f_context = open(state_file, "wb")
+
+    with f_context as marker_f:
         data = {
             "src_path": src_orig or src,
             "src_hash": app_manifest.hash,
