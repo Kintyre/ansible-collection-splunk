@@ -328,7 +328,7 @@ def ksconf_sideload_app(src, dest, src_orig=None):
     # Inventory paths are relative to the `dest` directory
     file_list = [app_manifest.name / f.path for f in app_manifest.files]
     # Remove non-existent paths (because manifest can be incorrect)
-    file_list = [os.fspath(f.path) for f in file_list if (dest/f).is_file()]
+    file_list = [os.fspath(f) for f in file_list if (dest/f).is_file()]
 
     # Hard code this for now!
     result["changed"] = True

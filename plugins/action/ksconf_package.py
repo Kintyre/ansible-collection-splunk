@@ -385,7 +385,7 @@ class ActionModule(ActionBase):
                 create_manifest_from_archive(archive_path, None, manifest=new_manifest)
 
                 if encrypt == "vault":
-                    vault_editor.encrypt_file(dest, secret=None)
+                    vault_editor.encrypt_file(archive_path, secret=None)
                     result["encryption"] = "vault"
                     result["encryption_size"] = archive_path.stat().st_size
             else:

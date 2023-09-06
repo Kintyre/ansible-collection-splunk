@@ -1,3 +1,7 @@
+## Release 0.21.1 (2023-09-06)
+* Bug fix for `ksconf_app_sideload` file existence checks.
+* Bug fix for encrypting new tarballs using `ksconf_package`.
+
 ## Release 0.21.0 (2023-08-25)
 * `ksconf_package`: Add ability to decrypt vaulted source files with `enable_handler=ansible-vault` and encrypted the generated tarballs using `encrypt=vault`.
 * The controller node now requires ksconf v0.11.5 or later.
