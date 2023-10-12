@@ -35,14 +35,14 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Get current version
         id: cversion
-        run: echo "::set-output name=version::$(grep ^version galaxy.yml | awk -F'"' '{ print $2 }')"
+        run: echo "version=$(grep ^version galaxy.yml | awk -F'"' '{ print $2 }') >> $GITHUB_OUTPUT"
 
       - name: Set up Python 3.9
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.9
 
@@ -58,30 +58,18 @@ jobs:
           echo "Contents of ${{github.workspace}}"
           ls -lsh "${{github.workspace}}"
 
-      - name: Create Release
-        uses: actions/create-release@v1
+      - name: Create GitHub Release and upload artifact
+        uses: softprops/action-gh-release@v1
         id: create_release
         if: contains(github.ref, 'tags/v')
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         with:
-          tag_name: ${{github.ref}}
-          release_name: Release ${{github.ref}}
+          name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
-
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        id: upload-release-asset
-        if: contains(github.ref, 'tags/v')
-        env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{env.package}}-${{steps.cversion.outputs.version}}.tar.gz
-          asset_name: ${{env.package}}-${{steps.cversion.outputs.version}}.tar.gz
-          asset_content_type: application/tar+gzip
+          files: ${{env.package}}-${{steps.cversion.outputs.version}}.tar.gz
 
       - name: Deploy Ansible collection to Galaxy
-        run: ansible-galaxy collection publish ${{env.package}}-${{ steps.cversion.outputs.version }}.tar.gz --api-key ${{ secrets.GALAXY_API_KEY }}
+        run: ansible-galaxy collection publish ${{env.package}}-${{ steps.cversion.outputs.version }}.tar.gz --token ${{ secrets.GALAXY_API_KEY }}
         if: contains(github.ref, 'tags/v')
