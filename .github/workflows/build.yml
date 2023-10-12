@@ -39,7 +39,7 @@ jobs:
 
       - name: Get current version
         id: cversion
-        run: echo "version=$(grep ^version galaxy.yml | awk -F'"' '{ print $2 }') >> $GITHUB_OUTPUT"
+        run: echo "version=$(grep ^version galaxy.yml | awk -F'"' '{ print $2 }')" >> $GITHUB_OUTPUT
 
       - name: Set up Python 3.9
         uses: actions/setup-python@v4
