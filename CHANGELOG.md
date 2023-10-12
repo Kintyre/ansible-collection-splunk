@@ -1,3 +1,6 @@
+## Release 0.21.2 (2023-10-12)
+* Add support for ksconf v0.13 which has some package namespace changes.
+
 ## Release 0.21.1 (2023-09-06)
 * Bug fix for `ksconf_app_sideload` file existence checks.
 * Bug fix for encrypting new tarballs using `ksconf_package`.

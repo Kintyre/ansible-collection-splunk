@@ -236,7 +236,10 @@ def calc_missing_parent_dirs(paths):
 
 
 def ksconf_sideload_app(src, dest, src_orig=None):
-    from ksconf import __version__ as ksconf_version
+    try:
+        from ksconf.version import version as ksconf_version
+    except ImportError:
+        from ksconf._version import version as ksconf_version
     from ksconf.app import get_facts_manifest_from_archive
     from ksconf.app.deploy import DeployActionType, DeployApply as DeployApplyBase, DeploySequence
     from ksconf.app.manifest import AppManifest

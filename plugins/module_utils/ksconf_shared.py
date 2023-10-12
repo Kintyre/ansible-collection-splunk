@@ -65,14 +65,19 @@ def check_ksconf_version(module: AnsibleModule = None) -> tuple:
         from ansible.utils.display import Display
         display = Display()
     try:
-        from ksconf import __version__ as ksconf_version
+        # Public interface (finally!)  Added in ksconf v0.13.4
+        from ksconf.version import version as ksconf_version
     except ImportError:
-        message = "Unable to import the 'ksconf' python module.  "\
-                  "Try running 'pip install -U ksconf'"
-        if module:
-            module.fail_json(msg=message)
-        else:
-            raise AnsibleActionFail(message=message)
+        try:
+            # Try hitting the internal version (fallback for older versions)
+            from ksconf._version import version as ksconf_version
+        except ImportError:
+            message = "Unable to import the 'ksconf' python module.  "\
+                "Try running 'pip install -U ksconf'"
+            if module:
+                module.fail_json(msg=message)
+            else:
+                raise AnsibleActionFail(message=message)
 
     match = re.match(r'(\d+)\.(\d+)\.(\d+)(.*)$', ksconf_version)
     if match:

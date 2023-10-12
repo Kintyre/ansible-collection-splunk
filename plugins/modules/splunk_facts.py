@@ -386,11 +386,17 @@ class SplunkMetadata(object):
 
     def fetch_ksconf_version(self, level):
         try:
-            import ksconf
+            try:
+                import ksconf.version as ksconf
+                ksconf.version  # Workaround for v0.13.3, which only has__version__
+            except (ImportError, AttributeError):
+                # Prior to v0.13.4
+                import ksconf._version as ksconf
             self._data["ksconf"] = {
-                "version": ksconf.__version__,
-                "vcs_info": ksconf.__vcs_info__,
-                "build": ksconf.__build__,
+                "version": ksconf.version,
+                "version_info": getattr(ksconf, "version_info", []),    # Added in v0.13.4
+                "vcs_info": ksconf.vcs_info,
+                "build": ksconf.build,
                 "package": ksconf.__package__,
                 "path": os.path.dirname(os.path.abspath(ksconf.__file__)),
             }
@@ -403,7 +409,12 @@ class SplunkMetadata(object):
             return
 
         try:
-            from ksconf.commands import get_all_ksconf_cmds
+            try:
+                # ksconf v0.13 ( 'ksconf.commands' is now a namespace)
+                from ksconf.command import get_all_ksconf_cmds
+            except ImportError:
+                # ks
+                from ksconf.commands import get_all_ksconf_cmds
             self._data["ksconf"]["commands"] = subcommands = {}
             for ep in get_all_ksconf_cmds(on_error="return"):
                 # (name, entry, cmd_cls, error)
