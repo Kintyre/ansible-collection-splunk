@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 #
 # MODULE:  (This runs on the target node)
@@ -52,6 +51,15 @@ options:
       - Typically this will be C(/opt/splunk/etc/apps) or a management folder like C(deployment-apps), C(manager-apps) (or C(master-apps) pre Splunk 9.0), or C(shcluster/apps).
     type: path
     required: true
+  state_file:
+    description:
+      - Override the default state file location.
+        The default state file location is nested immediately under the app folder, called C(.ksconf_sideload.json).
+      - Sometimes this may not be ideal when populating C(deployment-apps) where a single change could trigger a burst of traffic, or C(shcluster/apps) where looking at the manifest on the SHC members is always off (because local is merged to default behavior).
+      - Be sure you understand the implications of changing this path.
+        There must be one exactly state file per app per target, otherwise you can anticipate "flapping" between states as app deployment executes.
+    type: path
+    required: false
   io_buffer_size:
     description:
       - Size of the volatile memory buffer that is used for extracting files from the archive in bytes.
@@ -201,7 +209,7 @@ state:
   type: str
   sample: "directory"
 state_file:
-  description: Relative path to the json state tracking file where installation state, source hash, and application manifest is stored.
+  description: Path to the json state tracking file where installation state, source hash, and application manifest is stored.  By default, this is relative to the app install path.
   returned: always
   type: str
   sample: fire_brigade/.ksconf_sideload.json
@@ -229,7 +237,7 @@ def calc_missing_parent_dirs(paths):
     return [os.fspath(p) for p in list(known_dirs) + paths]
 
 
-def ksconf_sideload_app(src, dest, src_orig=None):
+def ksconf_sideload_app(src, dest, *, src_orig=None, state_file=None):
     try:
         from ksconf.version import version as ksconf_version
     except ImportError:
@@ -268,7 +276,11 @@ def ksconf_sideload_app(src, dest, src_orig=None):
 
     # state file
     app_dir: Path = dest / app_manifest.name
-    state_file: Path = app_dir / SIDELOAD_STATE_FILE
+    if state_file:
+        # Normally this an absolute file; but relative is permitted
+        state_file = app_dir / state_file
+    else:
+        state_file: Path = app_dir / SIDELOAD_STATE_FILE
 
     current_manifest = None
     if app_dir.is_dir():
@@ -338,6 +350,7 @@ def main():
             src=dict(type='path', required=True),
             src_orig=dict(type="path", required=False),  # Internal (added by action)
             dest=dict(type='path', required=True),
+            state_file=dict(type='path', required=False),
             # show_manifest=dict(type=bool, default=False, alias="list_files")
             list_files=dict(type='bool', default=False)
         ),
@@ -358,6 +371,7 @@ def main():
 
     src = module.params['src']
     src_orig = module.params["src_orig"]
+    state_file = module.params["state_file"]
     dest = module.params['dest']
     list_files = module.params["list_files"]
     b_dest = to_bytes(dest, errors='surrogate_or_strict')
@@ -383,7 +397,9 @@ def main():
     if module.check_mode:
         module.exit_json(msg="Check mode unsupported....  Please finish the implementation!")
 
-    res_args, files, state_file = ksconf_sideload_app(src, dest, src_orig=src_orig)
+    res_args, files, state_file = ksconf_sideload_app(src, dest,
+                                                      src_orig=src_orig,
+                                                      state_file=state_file)
 
     if res_args.get('diff', True) and not module.check_mode:
         # Reset permissions on all files (mode,owner,group,attr,se*)

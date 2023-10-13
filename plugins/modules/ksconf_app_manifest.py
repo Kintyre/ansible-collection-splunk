@@ -158,11 +158,15 @@ def build_app_manifest(app_dir: Path, state_file: Path) -> AppManifest:
     except TypeError:
         # Older ksconf.  Simply remove (and then restore) the manifest file
         try:
-            temp_state = app_dir.parent.joinpath(f".{app_dir.name}.ksconf-manifest-rebuild.tmp")
-            state_file.replace(temp_state)
+            if state_file.exists():
+                temp_state = app_dir.parent.joinpath(f".{app_dir.name}.ksconf-manifest-rebuild.tmp")
+                state_file.replace(temp_state)
+            else:
+                temp_state = None
             manifest = AppManifest.from_filesystem(app_dir, calculate_hash=True)
         finally:
-            temp_state.replace(state_file)
+            if temp_state:
+                temp_state.replace(state_file)
     return manifest
 
 

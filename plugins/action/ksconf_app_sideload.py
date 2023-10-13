@@ -129,6 +129,7 @@ class ActionModule(ActionBase):
         # Uses 'unarchive' like args
         source = src = self._task.args.get('src', None)
         dest = self._task.args.get('dest', None)
+        state_file = self._task.args.get("state_file", None)
         decrypt = self._task.args.get('decrypt', True)
         list_files = self._task.args.get('list_files', False)
 
@@ -172,7 +173,11 @@ class ActionModule(ActionBase):
                 # Pull back remote sideload state data, if present
                 # TODO: Check ansible facts first (Does this need an override parameter to skip?)
                 app_dir = os.path.join(dest, app_manifest.name)
-                state_file = os.path.join(app_dir, SIDELOAD_STATE_FILE)
+                if state_file:
+                    state_file = os.path.join(app_dir, state_file)
+                else:
+                    state_file = os.path.join(app_dir, SIDELOAD_STATE_FILE)
+
                 remote_manifest, remote_state = self.fetch_remote_manifest(
                     app_dir, state_file, task_vars)
 
