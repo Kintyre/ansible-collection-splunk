@@ -13,16 +13,10 @@ from pathlib import Path, PurePath
 
 from ansible.module_utils._text import to_bytes, to_native
 from ansible.module_utils.basic import AnsibleModule
+
 from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
     SIDELOAD_STATE_FILE, __version__ as collection_version,
     check_ksconf_version)
-
-
-# Import module_utils notes....   These have to be top-level imports due to how ansiballz ships
-# required modules to the target node (no try/except fallbacks allowed here)
-#
-# Module version:       ansible.module_utils.ksconf_shared
-# Collection version:   ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared
 
 
 __metaclass__ = type

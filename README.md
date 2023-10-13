@@ -80,3 +80,15 @@ ln -s $(pwd) ~/.ansible/collections/ansible_collections/cdillc/splunk
 ```
 
 Possible alternative approach would be to use `ANSIBLE_COLLECTIONS_PATH`, but you have to have the parent directories setup correctly, so the above symlink seems to work well enough, but it of course impacts the version used by the entire user.
+
+
+### Make it possible to import module_utils during development
+```bash
+mkdir -p ansible_collections/cdillc/splunk
+ln -s ../../../plugins ansible_collections/cdillc/splunk/
+```
+
+Add to `.vscode/settings.json`:
+```json
+    "python.analysis.stubPath": ".",
+```

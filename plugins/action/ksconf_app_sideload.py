@@ -31,7 +31,7 @@ display = Display()
 class ActionModule(ActionBase):
 
     TRANSFERS_FILES = True
-
+    '''
     def parse_remote_json_file(self, path, task_vars):
         """
         Fetch remote state file (.json) to determine if the app has changed
@@ -95,6 +95,23 @@ class ActionModule(ActionBase):
             display.warning(f"Remote JSON state file {state_file} is corrupt.  "
                             f"App will be replaced.  {e}")
             return None, None
+    '''
+
+    def fetch_remote_manifest(self, app_dir, state_file, task_vars) -> Tuple[AppManifest, dict]:
+        res = self._execute_module(module_name='cdillc.splunk.ksconf_app_manifest',
+                                   module_args=dict(app_dir=app_dir,
+                                                    state_file=state_file,
+                                                    rebuild_manifest=True),
+                                   task_vars=task_vars)
+        display.display(f" ksconf_app_manifest response raw:  {res}")
+        display.display(
+            f" ksconf_app_manifest result:  {res.get('result')}  failed={res.get('failed', False)}")
+        manifest = res.get("manifest", None)
+        state = res.get("state", None)
+        if manifest:
+            return AppManifest.from_dict(manifest), state
+        else:
+            return None, None
 
     def run(self, tmp=None, task_vars=None):
         ''' handler for app side-load operation '''
@@ -154,8 +171,13 @@ class ActionModule(ActionBase):
                 '''
                 # Pull back remote sideload state data, if present
                 # TODO: Check ansible facts first (Does this need an override parameter to skip?)
-                state_file = os.path.join(dest, app_manifest.name, SIDELOAD_STATE_FILE)
-                remote_manifest, remote_state = self.fetch_remote_manifest(state_file, task_vars)
+                app_dir = os.path.join(dest, app_manifest.name)
+                state_file = os.path.join(app_dir, SIDELOAD_STATE_FILE)
+                remote_manifest, remote_state = self.fetch_remote_manifest(
+                    app_dir, state_file, task_vars)
+
+                if remote_manifest:
+                    display.vvv(f"fCheck  {app_manifest.hash} == {remote_manifest.hash}")
 
                 if remote_manifest and app_manifest.hash == remote_manifest.hash:
                     changed = False
