@@ -20,6 +20,7 @@ from tempfile import NamedTemporaryFile
 
 from ansible.errors import AnsibleAction, AnsibleActionFail, AnsibleError
 from ansible.module_utils._text import to_text
+from ansible.module_utils.parsing.convert_bool import boolean
 from ansible.plugins.action import ActionBase
 from ansible.utils.display import Display
 from ksconf.app.manifest import AppArchiveContentError, AppManifest, load_manifest_for_archive
@@ -31,77 +32,12 @@ display = Display()
 class ActionModule(ActionBase):
 
     TRANSFERS_FILES = True
-    '''
-    def parse_remote_json_file(self, path, task_vars):
-        """
-        Fetch remote state file (.json) to determine if the app has changed
-        since last deployment.
 
-        The remote json file must be copied to a temporary named file to be
-        parsed locally.
-        """
-        display.vvv(f"JSON state file={path}")
-        with NamedTemporaryFile("rb+") as temp_f:
-            try:
-                self._connection.fetch_file(path, temp_f.name)
-            except AnsibleError as e:
-                # Sometimes this logic results in incorrect, but ignorable message on the first
-                # deploy when running with a single verbose ('-v') mode.
-                #  1:  Could not find file on the Ansible Controller.
-                #  2:  If you are using a module and expect the file to exist on the remote, see the remote_src option
-                # Maybe there's a way to clean that up?  Possibly by calling _execute_remote_stat() first???
-
-                # Try the legacy 'slurp' module.  This technique is borrowed from the builtin fetch
-                # action when "permissions are lacking or privilege escalation is needed"
-                slurp_res = self._execute_module(module_name='ansible.legacy.slurp',
-                                                 module_args=dict(src=path),
-                                                 task_vars=task_vars)
-                slurp_msg = to_text(slurp_res.get("msg", ""))
-                if slurp_res.get('failed') or slurp_msg:
-                    if slurp_msg.startswith("file not found:"):
-                        # No need to show a message
-                        return {}
-                    display.vv("Failed to fetch JSON state using slurp.  "
-                               f"file={path} msg={slurp_msg} first_exception={e}")
-                    return {}
-                else:
-                    display.v(f"Found JSON state file={path} using slurp!")
-
-                    if slurp_res['encoding'] == 'base64':
-                        temp_f.write(b64decode(slurp_res['content']))
-
-            temp_f.seek(0)
-            data = json.load(temp_f)
-
-            # Stupid dump of state data
-            d = data
-            if display.verbosity >= 3:
-                d = d.copy()
-                if "manifest" in data:
-                    d["manifest"] = d["manifest"].copy()
-                    d["manifest"]["files"] = f"Total of {len(data['manifest']['files'])} files ...."
-            display.vvv(f"JSON state file={path} data={d!r}")
-
-            return data
-
-    def fetch_remote_manifest(self, state_file, task_vars) -> Tuple[AppManifest, dict]:
-        try:
-            data = self.parse_remote_json_file(state_file, task_vars)
-            if "manifest" not in data:
-                # Possible upgrade scenario.  Nothing we can do but fresh install
-                return None, data
-            return AppManifest.from_dict(data.pop("manifest")), data
-        except json.decoder.JSONDecodeError as e:
-            display.warning(f"Remote JSON state file {state_file} is corrupt.  "
-                            f"App will be replaced.  {e}")
-            return None, None
-    '''
-
-    def fetch_remote_manifest(self, app_dir, state_file, task_vars) -> Tuple[AppManifest, dict]:
+    def fetch_remote_manifest(self, app_dir, task_vars, *, state_file=None, rebuild_manifest=True) -> Tuple[AppManifest, dict]:
         res = self._execute_module(module_name='cdillc.splunk.ksconf_app_manifest',
                                    module_args=dict(app_dir=app_dir,
                                                     state_file=state_file,
-                                                    rebuild_manifest=True),
+                                                    rebuild_manifest=rebuild_manifest),
                                    task_vars=task_vars)
         display.display(f" ksconf_app_manifest response raw:  {res}")
         display.display(
@@ -130,6 +66,7 @@ class ActionModule(ActionBase):
         source = src = self._task.args.get('src', None)
         dest = self._task.args.get('dest', None)
         state_file = self._task.args.get("state_file", None)
+        recreate_manifest = boolean(self._task.args.get("recreate_manifest", True))
         decrypt = self._task.args.get('decrypt', True)
         list_files = self._task.args.get('list_files', False)
 
@@ -179,7 +116,9 @@ class ActionModule(ActionBase):
                     state_file = os.path.join(app_dir, SIDELOAD_STATE_FILE)
 
                 remote_manifest, remote_state = self.fetch_remote_manifest(
-                    app_dir, state_file, task_vars)
+                    app_dir, task_vars,
+                    state_file=state_file,
+                    rebuild_manifest=recreate_manifest)
 
                 if remote_manifest:
                     display.vvv(f"fCheck  {app_manifest.hash} == {remote_manifest.hash}")
@@ -207,7 +146,7 @@ class ActionModule(ActionBase):
 
                 # remove action plugin only keys
                 new_module_args = self._task.args.copy()
-                for key in ('decrypt',):
+                for key in ('decrypt', 'recreate_manifest'):
                     if key in new_module_args:
                         del new_module_args[key]
 

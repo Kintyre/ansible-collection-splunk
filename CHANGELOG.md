@@ -1,7 +1,8 @@
-## Release 0.22.0 (DRAFT)
+## Release 0.22.0 (2023-10-13)
 * `ksconf_app_sideload` - Add support for (re-)creating metadata when missing.
+  * Add new `state_file` input parameter that allows the state information to be stored somewhere other than within the app folder.
+  * Add new `recreate_manifest` input parameters to disable new functionality, if desirable.
 * `ksconf_app_manifest` - Internal module (not for end-users; or at least use-at-your-own-risk, this can change on a whim!)
-* `ksconf_app_sideload` - Add new `state_file` input parameter that allows the state information to be stored somewhere other than within the app folder.
 
 ## Release 0.21.3-4 (2023-10-12)
 * Github action and galaxy publish fixes (no changes to collection content)

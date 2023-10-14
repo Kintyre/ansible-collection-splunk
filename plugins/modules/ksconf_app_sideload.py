@@ -60,6 +60,14 @@ options:
         There must be one exactly state file per app per target, otherwise you can anticipate "flapping" between states as app deployment executes.
     type: path
     required: false
+  recreate_manifest:
+    description:
+      - Allow remote rebuilding of corrupted or missing manifest state data.
+      - This can be beneficial when upgrading between versions of the collection.
+        But this may not be desirable in all situations.
+    type: bool
+    default: true
+    required: false
   io_buffer_size:
     description:
       - Size of the volatile memory buffer that is used for extracting files from the archive in bytes.
