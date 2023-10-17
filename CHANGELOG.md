@@ -1,3 +1,7 @@
+## Release 0.23.0 (2023-10-17)
+* Galaxy issues?
+
+
 ## Release 0.22.2 (2023-10-17)
 * `ksconf_app_manifest` - Fix typo that was breaking publishing to Galaxy.
 
