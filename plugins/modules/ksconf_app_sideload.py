@@ -115,7 +115,7 @@ attributes:
     bypass_host_loop:
       support: none
     check_mode:
-      support: full
+      support: none
 #    diff_mode:
 #      support: partial
 #      details: Uses gtar's C(--diff) arg to calculate if changed or not. If this C(arg) is not supported,

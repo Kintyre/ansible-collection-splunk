@@ -1,6 +1,9 @@
+## Release 0.24.0 (2023-10-17)
+* Fix ksconf_app_manifest bug on Python 3.8 (no is_relative_to() until Python 3.9)
+* Significant revamp of output handling (state reporting) and docs for ksconf_app_manifest module.
+
 ## Release 0.23.0 (2023-10-17)
 * Galaxy issues?
-
 
 ## Release 0.22.2 (2023-10-17)
 * `ksconf_app_manifest` - Fix typo that was breaking publishing to Galaxy.

@@ -39,12 +39,14 @@ class ActionModule(ActionBase):
                                                     state_file=state_file,
                                                     rebuild_manifest=rebuild_manifest),
                                    task_vars=task_vars)
-        manifest = res.get("manifest", None)
-        state = res.get("state", None)
+        manifest = state = None
+        if "manifest" in res:
+            manifest = res.pop("manifest")
+        if "state" in res:
+            state = res.pop("state")
         if manifest:
-            return AppManifest.from_dict(manifest), state
-        else:
-            return None, None
+            manifest = AppManifest.from_dict(manifest)
+        return manifest, state, res
 
     def run(self, tmp=None, task_vars=None):
         ''' handler for app side-load operation '''
@@ -112,10 +114,12 @@ class ActionModule(ActionBase):
                 else:
                     state_file = os.path.join(app_dir, SIDELOAD_STATE_FILE)
 
-                remote_manifest, remote_state = self.fetch_remote_manifest(
+                remote_manifest, remote_state, kam_res = self.fetch_remote_manifest(
                     app_dir, task_vars,
                     state_file=state_file,
                     rebuild_manifest=recreate_manifest)
+
+                result["ksconf_app_manifest_output"] = kam_res
 
                 if remote_manifest:
                     display.vvv(f"fCheck  {app_manifest.hash} == {remote_manifest.hash}")
@@ -158,6 +162,10 @@ class ActionModule(ActionBase):
                 result.update(self._execute_module(module_name="cdillc.splunk.ksconf_app_sideload",
                                                    module_args=new_module_args,
                                                    task_vars=task_vars))
+
+                if "manifest_msg" in result and "result" in kam_res and kam_res["result"] != "loaded":
+                    result["manifest_msg"] += f" after manifest was {kam_res['result']}"
+
             else:
                 # Simulate the output of the ksconf_app_sideload module
                 result["changed"] = False
