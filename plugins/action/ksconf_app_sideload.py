@@ -33,15 +33,15 @@ class ActionModule(ActionBase):
 
     TRANSFERS_FILES = True
 
-    def fetch_remote_manifest(self, app_dir, task_vars, *, state_file=None, rebuild_manifest=True) -> Tuple[AppManifest, dict]:
+    def fetch_remote_manifest(self, app_dir, task_vars, *,
+                              state_file=None,
+                              rebuild_manifest=True
+                              ) -> Tuple[AppManifest, dict]:
         res = self._execute_module(module_name='cdillc.splunk.ksconf_app_manifest',
                                    module_args=dict(app_dir=app_dir,
                                                     state_file=state_file,
                                                     rebuild_manifest=rebuild_manifest),
                                    task_vars=task_vars)
-        display.display(f" ksconf_app_manifest response raw:  {res}")
-        display.display(
-            f" ksconf_app_manifest result:  {res.get('result')}  failed={res.get('failed', False)}")
         manifest = res.get("manifest", None)
         state = res.get("state", None)
         if manifest:

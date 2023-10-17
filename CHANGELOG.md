@@ -1,3 +1,6 @@
+## Release 0.22.1 (2023-10-17)
+* `ksconf_app_sideload` - Remove some accidental (debug) output that's always enabled.
+
 ## Release 0.22.0 (2023-10-13)
 * `ksconf_app_sideload` - Add support for (re-)creating metadata when missing.
   * Add new `state_file` input parameter that allows the state information to be stored somewhere other than within the app folder.
