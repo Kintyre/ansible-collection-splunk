@@ -23,8 +23,7 @@ from typing import TYPE_CHECKING, Any
 from ansible.module_utils.basic import AnsibleModule
 
 from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
-    SIDELOAD_STATE_FILE, __version__ as collection_version,
-    check_ksconf_version)
+    __version__ as collection_version, check_ksconf_version)
 
 
 try:
@@ -55,40 +54,43 @@ short_description: Splunk app manifest
 version_added: '0.22.0'
 author: Lowell C. Alleman (@lowell80)
 description:
-     - This is used internally by the M(ksconf_app_sideload).  This is not currently intended to be used directly by users.
+  - This is used internally by the M(ksconf_app_sideload).
+    This is not currently intended to be used directly by users.
 
 requirements:
   - ksconf>=0.11
 
 options:
   app_dir:
-    description:  Path to Splunk application
+    description: Path to Splunk application
     type: path
     required: true
-  manifest: Location of manifest file
+  manifest:
+    description: Location of manifest file
     type: path
     required: true
 
 attributes:
-    action:
-      support: full
-    async:
-      support: none
-    bypass_host_loop:
-      support: none
-    check_mode:
-      support: full
-    diff_mode:
-      support: none
-    platform:
-      platforms: posix
-    safe_file_operations:
-      support: none
-    vault:
-      support: none
+  action:
+    support: full
+  async:
+    support: none
+  bypass_host_loop:
+    support: none
+  check_mode:
+    support: full
+  diff_mode:
+    support: none
+  platform:
+    platforms: posix
+  safe_file_operations:
+    support: none
+  vault:
+    support: none
 
 notes:
-    - Requires ksconf on the target host.
+  - Requires ksconf on the target host.
+
 '''
 
 
@@ -114,7 +116,8 @@ state:
   type: str
   sample:
 # state_file:
-#  description: Relative path to the json state tracking file where installation state, source hash, and application manifest is stored.
+#  description: Relative path to the json state tracking file where installation state, source hash,
+#               and application manifest is stored.
 #  returned: always
 #  type: str
 #  sample: fire_brigade/.ksconf_sideload.json

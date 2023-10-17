@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 from ansible.module_utils.basic import AnsibleModule
+
 from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
     SIDELOAD_STATE_FILE, find_splunk_home)
 

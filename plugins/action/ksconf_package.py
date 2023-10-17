@@ -19,6 +19,7 @@ from ansible.parsing.vault import VaultEditor, VaultLib, b_HEADER as VAULT_HEADE
 from ansible.plugins.action import ActionBase
 from ansible.template import Templar
 from ansible.utils.display import Display
+
 from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
     check_ksconf_version, temp_decrypt)
 
@@ -405,7 +406,7 @@ class ActionModule(ActionBase):
             result["app_name"] = packager.app_name
             result["archive_size"] = size
 
-            # TODO: return DELTA, this is basically done and ready.  See DeploySequence.from_manifest_transformation(old, new)
+            # TODO: return DELTA, this is basically done. See DeploySequence.from_manifest_transformation(old, new)
 
             # TODO: return the layer names used.  Currently hidden behind AppPackager's internal call to "combine"
             # result["layers"] = list(...)

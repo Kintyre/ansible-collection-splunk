@@ -1,3 +1,6 @@
+## Release 0.22.2 (2023-10-17)
+* `ksconf_app_manifest` - Fix typo that was breaking publishing to Galaxy.
+
 ## Release 0.22.1 (2023-10-17)
 * `ksconf_app_sideload` - Remove some accidental (debug) output that's always enabled.
 

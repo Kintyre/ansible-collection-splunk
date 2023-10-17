@@ -48,16 +48,20 @@ options:
   dest:
     description:
       - Remote absolute path where the archive should be unpacked.
-      - Typically this will be C(/opt/splunk/etc/apps) or a management folder like C(deployment-apps), C(manager-apps) (or C(master-apps) pre Splunk 9.0), or C(shcluster/apps).
+      - Typically this will be C(/opt/splunk/etc/apps) or a management folder like C(deployment-apps),
+        C(manager-apps) (or C(master-apps) pre Splunk 9.0), or C(shcluster/apps).
     type: path
     required: true
   state_file:
     description:
       - Override the default state file location.
         The default state file location is nested immediately under the app folder, called C(.ksconf_sideload.json).
-      - Sometimes this may not be ideal when populating C(deployment-apps) where a single change could trigger a burst of traffic, or C(shcluster/apps) where looking at the manifest on the SHC members is always off (because local is merged to default behavior).
+      - Sometimes this may not be ideal when populating C(deployment-apps) where a single change could trigger a burst
+        of traffic, or C(shcluster/apps) where looking at the manifest on the SHC members is always off (because local
+        is merged to default behavior).
       - Be sure you understand the implications of changing this path.
-        There must be one exactly state file per app per target, otherwise you can anticipate "flapping" between states as app deployment executes.
+        There must be one exactly state file per app per target, otherwise you can anticipate "flapping" between states
+        as app deployment executes.
     type: path
     required: false
   recreate_manifest:
@@ -114,7 +118,8 @@ attributes:
       support: full
 #    diff_mode:
 #      support: partial
-#      details: Uses gtar's C(--diff) arg to calculate if changed or not. If this C(arg) is not supported, it will always unpack the archive.
+#      details: Uses gtar's C(--diff) arg to calculate if changed or not. If this C(arg) is not supported,
+#               it will always unpack the archive.
     platform:
       platforms: posix
     safe_file_operations:
@@ -217,7 +222,9 @@ state:
   type: str
   sample: "directory"
 state_file:
-  description: Path to the json state tracking file where installation state, source hash, and application manifest is stored.  By default, this is relative to the app install path.
+  description: >
+    Path to the json state tracking file where installation state, source hash, and application manifest is stored.
+    By default, this is relative to the app install path.
   returned: always
   type: str
   sample: fire_brigade/.ksconf_sideload.json
@@ -307,7 +314,8 @@ def ksconf_sideload_app(src, dest, *, src_orig=None, state_file=None):
 
     seq = DeploySequence.from_manifest_transformation(current_manifest, app_manifest)
 
-    # Need some kind of context manager here that (1) locks manifest file, (2) Puts an in-progress marker in the manifest file so that we know the state is corrupted / interrupted.
+    # Need some kind of context manager here that (1) locks manifest file,
+    # (2) Puts an in-progress marker in the manifest file so that we know the state is corrupted / interrupted.
     deployer.apply_sequence(seq)
 
     result["manifest_msg"] = manifest_msg

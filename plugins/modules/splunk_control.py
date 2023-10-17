@@ -141,7 +141,7 @@ def server_restart(module, service, params):
     return outputs
 
 
-#### Implementation without the Python Splunk SDK installed ###################
+# ##### Implementation without the Python Splunk SDK installed #################
 
 urlopenkwargs = {}
 
@@ -218,7 +218,7 @@ def ping_it(host, port, timeout=300, wait_for="up"):
                 s.close()
         time.sleep(1)
 
-#### END Implementation without the Python Splunk SDK installed ###############
+# ##### END Implementation without the Python Splunk SDK installed #############
 
 
 def main():

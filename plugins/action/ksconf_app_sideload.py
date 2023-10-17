@@ -5,7 +5,6 @@
 
 from __future__ import absolute_import, division, print_function
 
-import json
 from typing import Tuple
 
 from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
@@ -15,8 +14,6 @@ from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import
 __metaclass__ = type
 
 import os
-from base64 import b64decode
-from tempfile import NamedTemporaryFile
 
 from ansible.errors import AnsibleAction, AnsibleActionFail, AnsibleError
 from ansible.module_utils._text import to_text
@@ -173,7 +170,7 @@ class ActionModule(ActionBase):
                 result["app_facts"] = {"name": remote_manifest.name}
 
                 # Note that this version does NOT include directories.
-                # (Not sure why we care; I suppose we are trying to match the 'list_files' behavior of the builtin unarchive module.)
+                # Trying to match the 'list_files' behavior of the builtin unarchive module.)
                 if list_files:
                     result["files"] = [os.fspath(f.path) for f in remote_manifest.files]
 

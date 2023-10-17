@@ -41,7 +41,8 @@ description:
     - This is a lightweight wrapper around the Splunk CLI that handles auth
       parameter hiding and some other niceties.
     - This is a drop-in replacement for M(ansible.builtin.command).
-      When converting, simply replace authenticated calls using C(-auth user:password) to use I(username) and (password) module options.
+      When converting, simply replace authenticated calls using C(-auth user:password) to
+      use I(username) and (password) module options.
       Additional sensitive arguments can be protected too using I(hidden_args).
     - Calls to remote splunkd instance can be handled by specifying I(splunkd_uri).
 version_added: "0.9.0"
@@ -223,7 +224,7 @@ def main():
         splunk_home = splunk_home2
         executable = args[0]
     elif not splunk_home:
-        module.fail_json(msg=f"No known value for splunk_home!  Must provide 'splunk_home' "
+        module.fail_json(msg="No known value for splunk_home!  Must provide 'splunk_home' "
                          "or full path to splunk executable via 'cmd'")
     else:
         # Make sure that 'splunk' is the first argument

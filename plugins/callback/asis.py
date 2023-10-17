@@ -19,8 +19,9 @@ DOCUMENTATION = '''
     short_description: As-is Ansible screen output
     version_added: v0.19.4
     description:
-        - This output callback will simply dump the values of C(stdout), C(stderr), and C(msg) fields to the screen, as is.
-        - Setting the 'no_log' directive on a task will hide it from the output entiirely.
+        - This output callback will simply dump the values of C(stdout), C(stderr), and C(msg)
+          fields to the screen, as is.
+        - Setting the 'no_log' directive on a task will hide it from the output entirely.
         - Failures and warnings are still displayed.  These are borrowed from the 'minimal' callback plugin.
 '''
 
@@ -96,9 +97,11 @@ class CallbackModule(CallbackBase):
 
         '''
         if result._task.action in C.MODULE_NO_JSON and 'ansible_job_id' not in result._result:
-            self._display.display(self._command_generic_msg(result._host.get_name(), result._result, state), color=color)
+            self._display.display(self._command_generic_msg(result._host.get_name(),
+                                                            result._result, state), color=color)
         else:
-            self._display.display("%s | %s => %s" % (result._host.get_name(), state, self._dump_results(result._result, indent=4)), color=color)
+            self._display.display("%s | %s => %s" % (result._host.get_name(), state,
+                                                     self._dump_results(result._result, indent=4)), color=color)
         '''
 
     def v2_runner_on_skipped(self, result):

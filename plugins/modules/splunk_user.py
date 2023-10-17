@@ -157,7 +157,8 @@ options:
 
     force_change_pass:
         description:
-            - Force user to change password.  This field is set when the user is first created or when I(update_password=true).
+            - Force user to change password.
+              This field is set when the user is first created or when I(update_password=true).
         required: false
         default: null
         type: bool
@@ -172,11 +173,13 @@ options:
         type: bool
 
 notes:
-    - The default behavior of this module will only set I(password) and I(force_change_pass) when the user is first created.
+    - The default behavior of this module will only set I(password) and I(force_change_pass) when
+      the user is first created.
       This enables mostly idempotent behavior for other parameters without unwanted side effects.
       Set I(update_password=true) to explicitly update the password of an existing account,
       or I(update_force_change_pass=true) to force a user to change their current password.
-      Similarly, updates to the I(roles) field can be set to overwrite roles by default or append new roles when I(append_roles=true).
+      Similarly, updates to the I(roles) field can be set to overwrite roles by default or append
+      new roles when I(append_roles=true).
 '''
 
 RETURN = r'''
@@ -197,7 +200,8 @@ updated_attrs:
   description: A list of attributes that were set.
   type: list
 content:
-  description: User attributes as returned by Splunk.  A few highlights have provided below for quick reference.
+  description: User attributes as returned by Splunk.
+               A few highlights have provided below for quick reference.
   type: dict
   returned: >-
     when user is listed, created, or updated.  Upon deletion this is shown too,
@@ -331,7 +335,8 @@ def import_splunk_sdk(splunk_home=None, search_paths=None):
     try:
         import splunklib.client as client
 
-        # Assume that we only need to do this with Splunk SDK living under the SPLUNK_HOME; OS-level install should be up-to-date via other mechanisms.
+        # Assume that we only need to do this with Splunk SDK living under the SPLUNK_HOME;
+        # OS-level install should be up-to-date via other mechanisms.
         evil_ssl_nocertcheck_hack()
     except ImportError:
         client = None
