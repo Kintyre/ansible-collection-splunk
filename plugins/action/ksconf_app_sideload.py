@@ -46,6 +46,8 @@ class ActionModule(ActionBase):
             state = res.pop("state")
         if manifest:
             manifest = AppManifest.from_dict(manifest)
+        for warning in res.get("warnings", []):
+            display.warning(warning)
         return manifest, state, res
 
     def run(self, tmp=None, task_vars=None):

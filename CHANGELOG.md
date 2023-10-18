@@ -1,3 +1,7 @@
+## Release 0.24.1 (2023-10-18)
+* Fix bug in manifest upgrade pathway (wasn't skipping inline state file)
+* Promote warnings from the ksconf_app_manifest via the ksconf_app_sideload action.
+
 ## Release 0.24.0 (2023-10-17)
 * Fix ksconf_app_manifest bug on Python 3.8 (no is_relative_to() until Python 3.9)
 * Significant revamp of output handling (state reporting) and docs for ksconf_app_manifest module.

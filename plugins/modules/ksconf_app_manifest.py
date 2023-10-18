@@ -187,9 +187,9 @@ def build_app_manifest(app_dir: Path, state_file: Path) -> AppManifest:
             # State file not stored within the app directory.  Nothing to filter out
             # NOTE: Can't use is_relative_to(); added in Python 3.9, still supporting 3.8
             filter_state_file = None
-        else:
-            # No existing state file; nothing to filter (other deployment mechanism, or alternate state_file location?)
-            filter_state_file = None
+    else:
+        # No existing state file; nothing to filter (other deployment mechanism, or alternate state_file location?)
+        filter_state_file = None
 
     try:
         # Ksconf v0.13.4 adds 'filter_file'
