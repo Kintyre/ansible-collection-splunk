@@ -17,6 +17,7 @@ from __future__ import absolute_import, division, print_function
 import json
 import os
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Tuple
 
@@ -74,6 +75,12 @@ options:
     description: Rebuild the manifest information when missing from or corrupted with the state file.
     type: bool
     default: false
+  discard_local_app_autogen:
+    description:
+        - Discard the auto generated C(local/app.conf) file created by the deployment server.
+        - This requires ksconf v0.13.5, or this feature will be ignored.
+    type: bool
+    default: true
 
 extends_documentation_fragment:
     - action_common_attributes
@@ -175,7 +182,8 @@ def get_app_manifest(state_file: Path) -> Tuple[AppManifest, dict, str]:
         return None, None, "missing"
 
 
-def build_app_manifest(app_dir: Path, state_file: Path) -> AppManifest:
+def build_app_manifest(app_dir: Path, state_file: Path,
+                       discard_local_app_autogen=True) -> AppManifest:
     """ Build a new app manifest for an existing app directory. """
     from ksconf.app.manifest import AppManifest
 
@@ -192,7 +200,7 @@ def build_app_manifest(app_dir: Path, state_file: Path) -> AppManifest:
         filter_state_file = None
 
     try:
-        # Ksconf v0.13.4 adds 'filter_file'
+        # Ksconf v0.13.4 adds 'filter_file' argument
         manifest = AppManifest.from_filesystem(app_dir, calculate_hash=True,
                                                filter_file=filter_state_file)
     except TypeError:
@@ -207,6 +215,11 @@ def build_app_manifest(app_dir: Path, state_file: Path) -> AppManifest:
         finally:
             if temp_state:
                 temp_state.replace(state_file)
+
+    if discard_local_app_autogen:
+        with suppress(AttributeError):
+            manifest.drop_ds_autogen()
+
     return manifest
 
 
@@ -237,6 +250,7 @@ def main():
             app_dir=dict(type='path', required=True),
             state_file=dict(type="path", required=False),
             rebuild_manifest=dict(type=bool, default=False),
+            discard_local_app_autogen=dict(type=bool, default=True),
             raise_exception=dict(type=bool, default=False),        # Undocumented.  For internal debugging
         ),
         supports_check_mode=False,
@@ -257,6 +271,7 @@ def main():
     state_file = module.params["state_file"]
     rebuild_manifest = module.params['rebuild_manifest']
     raise_exception = module.params["raise_exception"]
+    discard_local_app_autogen = module.params["discard_local_app_autogen"]
 
     if state_file:
         state_file = Path(state_file)
@@ -293,7 +308,7 @@ def main():
 
             prev_mod_version = state.get('ansible_module_version', '?')
             try:
-                manifest = build_app_manifest(app_dir, state_file)
+                manifest = build_app_manifest(app_dir, state_file, discard_local_app_autogen)
                 state = write_app_state(state_file, manifest, state)
                 results["changed"] = True
             except Exception as e:

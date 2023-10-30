@@ -68,7 +68,14 @@ options:
     description:
       - Allow remote rebuilding of corrupted or missing manifest state data.
       - This can be beneficial when upgrading between versions of the collection.
-        But this may not be desirable in all situations.
+        But this may not be desirable in all situations. For example, any files not in new app will
+        be removed, which can be problematic if you've intensionally created content within an app
+        (e.g., you've deployed to the 'apps' folder of a running search head and allowed users to
+        create/edit knowledge objects)
+      - When disabled, any app update from earlier versions will simply overwrite the current
+        content, leaving any unknown files as-is.  This means that previously deleted content will
+        remain also means that previously delete content will not be removed, as file deletions were
+        not supported prior to manifest support.
     type: bool
     default: true
     required: false
@@ -301,17 +308,19 @@ def ksconf_sideload_app(src, dest, *, src_orig=None, state_file=None):
     if app_dir.is_dir():
         if state_file.is_file():
             try:
-                data = json.loads(state_file.read_text())["manifest"]
-                current_manifest = AppManifest.from_dict(data)
+                data = json.loads(state_file.read_text())
+                if "manifest" in data:
+                    current_manifest = AppManifest.from_dict(data["manifest"])
+                    manifest_msg = "manifest used for transformational update"
+                else:
+                    manifest_msg = "manifest missing from state file (upgrade?)"
                 del data
-                manifest_msg = "manifest for transformational upgrade"
             except (OSError, KeyError, ValueError) as e:
                 manifest_msg = f"manifest unusable due to {type(e).__name__}: {e}"
         else:
             manifest_msg = "manifest missing"
     else:
         manifest_msg = "newly created manifest file (fresh app install)"
-
     seq = DeploySequence.from_manifest_transformation(current_manifest, app_manifest)
 
     # Need some kind of context manager here that (1) locks manifest file,
