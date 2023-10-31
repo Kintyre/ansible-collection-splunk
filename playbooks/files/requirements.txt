@@ -1,4 +1,4 @@
 pip
 wheel
-ksconf==0.11.5
+ksconf==0.13.5
 splunk-sdk>=1.7
