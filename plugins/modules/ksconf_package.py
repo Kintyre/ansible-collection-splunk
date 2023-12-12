@@ -50,16 +50,30 @@ attributes:
 
 options:
     source:
-        description: Path to input directory for the app
+        description: Path of app directory
         type: path
         aliases: [src]
         required: true
 
     file:
         description: >
-            Tarball file created of the app.  This can be I(.spl) or I(.tar.gz)
-            This parameter supports dynamic placeholders.
-            Variables are listed L(here,https://ksconf.readthedocs.io/en/stable/cmd_package.html#variables)
+            - Tarball file created of the app.  This can be I(.spl) or I(.tar.gz)
+            - This parameter supports dynamic placeholders.
+              Variables are listed L(here,https://ksconf.readthedocs.io/en/stable/cmd_package.html#variables)
+            - This value may require extra planning in scenarios where ksconf layers are in use
+              and/or when templates are being used in combinations with variables.
+              Any time a single I(source) input directory is used to build multiple variations or
+              versions of an app a unique output I(file) is needed.
+              Without taking this into consideration, various inefficiencies (cache misses)
+              or the wrong variation being deployed or other confusing behavior.
+              This can be avoided with planning.
+              When using various layers, add C([[layers_hash]]) to the filename
+              to easily solve this problem.
+              When using templates with variables a custom approach is needed.
+              For example, if building apps for different regions based on the I(region) variable.
+              simply ensure that C({{region}}) appears in in I(file) value.
+              These approaches are not mutually exclusive.
+              It's possible to combine both layers and Jinja variable approaches in combination.
         type: path
         required: true
 
@@ -139,8 +153,8 @@ options:
             - This dictionary can be structured any way that's helpful.
               There are no restrictions imposed, but be aware that sending more variables than
               needed could result in extra processing.
-              Future speedups will be based on building a hash of full value of the I(template_vars)
-              data structure so any change will trigger a cache miss.
+            - Caching speedups are based on building a hash of contents of I(template_vars) and
+              other inputs.
         type: dict
         required: false
         default: {}
@@ -162,6 +176,13 @@ options:
             - false
             - vault
 
+    cache_storage:
+        description:
+          - Path to local cache storage.
+          - Avoid sharing this too broadly, for example in a multitenant scenario.
+        type: path
+        default: ~/.cache/cdillc-splunk-ksconf-package
+
 # set_version
 # set_build
 
@@ -173,7 +194,7 @@ notes:
       was the most common way to use this module anyways.
       Switching from a module to an action allows us access to the full variable inventory that
       isn't accessible to remote modules without explicitly passing in every variable needed.
-    - Several arguments accept ksconf variables.  Traditionally these are written in a Jinja-2 like
+    - Several parameters accept ksconf variables.  Traditionally these are written in a Jinja-2 like
       syntax, which is familiar, but leads to some confusion when embedded in an Ansible playbook.
       To avoid Jinja escaping these variables manually, this modules supports C([[var]]) syntax too.
       If the path includes C([[version]]) that will be translated to C({{version}}) before be
@@ -181,10 +202,36 @@ notes:
     - Jinja template files are detected based on the C(*.j2) pattern.
       The C(.j2) extension will be removed from the final name.
       Remember this off by default, and must be enabled with I(enable_handler).
-    - Idempotent operations are supported by hashing various inputs and cached tarballs from a
-      previous run.
+    - Idempotent operations are supported by rendering the app to a temporary file and then
+      comparing the content signature of a newly generated tarball against the previous one.
+      To speed this up a cached C(.manifest) file is stored along side I(file) so that the
+      previous hash doesn't need to be recalculated in many cases.
+      As this requires a non-trivial amount of work for larger apps, this can feel slow.
+    - As of v0.25. caching behavior is supported to reduce the amount of work that needs to be done
+      in many no-change operations.
+      Caching is implemented by saving the output of previous runs and determining if any parameters
+      or if the I(source) directory itself has undergone any changes since the last execution.
+      A cache hit occurs when no changes have been detected, and therefore reuse occurs;
+      the output file and return values are re-used from a previous execution.
+
+      Specifically any change to I(file), I(block), I(layer_method), I(layers), I(local),
+      I(follow_symlink), I(app_name), I(template_vars), or I(encrypt) can modify the resulting
+      tarball, and therefore will trigger a cache miss.
+      Additionally, the entire I(source) directory is scanned for changes.
+      Any change will trigger a full rebuild, even if the change is to a file that is blocked or is
+      contained within an excluded layer.
+
+      Change detection for I(source) is based on file name, size, timestamps and not a hash.
       This allows quick execution when no inputs have changed which is a very common scenario.
-      More work is planned to speed up this behavior.
+
+      Basic tampering should be detected, for example, if the I(file) itself changed, then a cache
+      miss will be forced.
+
+    - |
+      Known limitations:  There are issues with caching and the use of templates that can result in a
+      cache hits at inappropriate times.
+      Currently the only workaround is to manually purge the cache, but better behavior is planned.
+
     - When using both templates and layering, be aware that Jinja2 templates are expanded before
       layer filtering.  This allows one layer to include C(indexes.conf) and another layer to
       include C(indexes.conf.j2).  All templates will be expanded first, then the resulting layers
@@ -207,21 +254,31 @@ app_name:
     type: str
     returned: always
     sample: org_custom_tech
+
 action:
   description: >
-    Resulting action code.  Values are C(created), C(updated), or C(unchanged).
+    Resulting action code.
+    Values are C(created), C(updated), C(unchanged), or C(cached).
+    Both C(cached) and C(unchanged) indicate that the output file was reused from a previous run.
+    C(cached) means that no-changes were found early in the process (based on the I(source) folder and parameters),
+    whereas C(unchanged) means that no change was detected but only after packaging the entire app.
+    C(created) means no existing output file was present.
+    C(updated) means that the output checksum changed.
     If I(encrypt) has changed, without any changes in I(source), then actions
     will be either C(encrypt) and C(decrypt).
   type: str
   returned: always
   sample: unchanged
+
 archive:
     description: >
-        The location where the generated archive lives.
-        This could vary dynamically if C(file) contained a placeholder.
+        Location of the generated archive.
+        This will either be the literal value passed to I(file), or
+        the expanded version of I(file) when ksconf variables are used.
     type: path
     returned: always
     sample: /tmp/splunk_apps/org_custom_tech-1.4.3.tgz
+
 archive_size:
     description: Size of the generated C(archive) file in bytes.
     type: int
@@ -242,7 +299,7 @@ encryption_size:
 stdout:
     description: Output stream of details from the ksconf packaging operations.
     type: str
-    returned: always
+    returned: when package created
     sample:
 
 new_hash:
@@ -263,6 +320,17 @@ context:
     description: Optional pass-through field.  See the C(context) parameter.
     type: dict
     returned: when provided
+
+cache:
+    description:
+      - Cache result status or message in case of a cache error.
+      - Values include:  C(hit), C(miss), C(created), C(disabled).
+        Other values start with C(failed) and a reason message.
+        Note that C(miss) will rarely occur unless new cache cannot be created.
+        C(created) implies a cache miss.
+    type: dict
+    returned: always
+
 '''
 
 

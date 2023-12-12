@@ -7,6 +7,8 @@
 from __future__ import absolute_import, division, print_function
 
 import datetime
+import hashlib
+import json
 import os
 import re
 from io import StringIO
@@ -21,7 +23,7 @@ from ansible.template import Templar
 from ansible.utils.display import Display
 
 from ansible_collections.cdillc.splunk.plugins.module_utils.ksconf_shared import (
-    check_ksconf_version, temp_decrypt)
+    __version__ as collection_version, check_ksconf_version, temp_decrypt)
 
 
 display = Display()
@@ -33,7 +35,7 @@ JINJA_HANDLERS = ["ansible", "ansible-jinja"]
 TEMPLATE_HANDLERS = JINJA_HANDLERS
 
 
-ksconf_min_version = (0, 11, 4)
+ksconf_min_version = (0, 13, 7)
 ksconf_min_version_text = ".".join(f"{i}" for i in ksconf_min_version)
 
 ksconf_version = check_ksconf_version()
@@ -43,9 +45,11 @@ if ksconf_version < ksconf_min_version:
 
 
 from ksconf.app.manifest import create_manifest_from_archive, load_manifest_for_archive  # noqa
+from ksconf.builder.cache import FileSet, fingerprint_stat  # noqa
 from ksconf.conf.parser import ConfParserException, parse_string  # noqa
 from ksconf.layer import LayerRenderedFile, layer_file_factory, register_file_handler  # noqa
 from ksconf.package import AppPackager  # noqa
+from ksconf.util.file import atomic_open  # noqa
 
 
 def validate_rendered(logical_path: Path, template_path: Path, value: str):
@@ -192,6 +196,103 @@ class ActionModule(ActionBase):
     # Don't support moving files.  Everything is done on the controller
     TRANSFERS_FILES = False
 
+    PARAMS_NO_CACHE = {"source", "context", "cache_storage"}
+
+    def filter_params(self, params: dict) -> dict:
+        params = dict(params)
+        # Drop unwanted params and normalize
+        for key in self.PARAMS_NO_CACHE:
+            del params[key]
+        return params
+
+    def get_cache_id(self, source: Path, params: dict) -> str:
+        # Build a unique fingerprint for the combination of (1) input parameters,
+        # and (2) signature of the 'source' directory
+        source = Path(source)
+        cache_params = self.filter_params(params)
+        h = hashlib.new("sha256")
+        content = json.dumps(cache_params, indent=0, sort_keys=True)
+        h.update(content.encode("utf-8"))
+        param_sig = h.hexdigest()
+        return f"{source.name}-@-{param_sig[:32]}"
+
+    def save_cached_execution(self,
+                              cache_file: Path,
+                              source: str,
+                              inputs: dict,
+                              outputs: dict,
+                              output_file: Path) -> bool:
+
+        cache_data = {
+            "inputs": self.filter_params(inputs),   # Not really used; for troubleshooting
+            "outputs": outputs,
+            "version": collection_version,
+        }
+        assert cache_data["outputs"]["archive"] == os.fspath(output_file)
+
+        # TODO:  Optimize this so we don't have to recalculate this
+        source_fileset = FileSet.from_filesystem(Path(source), fingerprint=fingerprint_stat)
+        cache_data["source"] = source_fileset.to_cache()
+
+        cache_data["output_fingerprint"] = fingerprint_stat(output_file)
+
+        display.vvv(f"Cache data to {cache_file} with content:  {cache_data!r}")
+
+        try:
+            with atomic_open(cache_file, ".tmp", "w") as cache_fp:
+                # TODO: indent only if debug/verbose level is set... (need to lookup how to do that)
+                #       display.verbosity > 1  ?
+                json.dump(cache_data, cache_fp, indent=2)
+        except IOError as e:
+            display.v(f"Unable to save cache file at:  {cache_file} due to {e}")
+            return False
+        return True
+
+    def load_cached_execution(self,
+                              cache_file: Path,
+                              source: str) -> dict:
+        try:
+            with open(cache_file) as cache_fp:
+                cache_data = json.load(cache_fp)
+        except IOError as e:
+            display.vvv(f"Unable to load cache file at:  {cache_file} due to {e}")
+            return {}
+
+        if cache_data["version"] != collection_version:
+            display.v(f"Invalidating cache due to version mismatch. {cache_data['version']} vs {collection_version}")
+            return {}
+
+        # Check to see if the 'file' (dest) value matches the cached fingerprint.
+        cached_output_file = Path(cache_data["outputs"]["archive"])
+        try:
+            output_fp_live = fingerprint_stat(cached_output_file)
+        except IOError as e:
+            display.v("Removing cached record due to missing output file.  "
+                      f"Deleting {cache_file} because the named output file {cached_output_file} cannot be found.  {e}")
+            # with suppress:
+            if True:
+                cache_file.remove()
+
+        output_fp_cache = cache_data["output_fingerprint"]
+
+        if output_fp_cache != output_fp_live:
+            display.v(f"Cache mismatch because {cached_output_file} changed.  {output_fp_cache} != {output_fp_live}.  "
+                      "If this happens frequently, it could be due to inadequate cache subdivisions.  "
+                      "Common solutions to this is diversifying the output 'file' name using variables or "
+                      "by adding '[[ layers_hash ]]' if role-specific ksconf layers are in use.")
+            return {}
+
+        fileset_cache = FileSet.from_cache(cache_data["source"], fingerprint=fingerprint_stat)
+        fileset_live = FileSet.from_filesystem(Path(source), fingerprint=fingerprint_stat)
+
+        if fileset_cache != fileset_live:
+            display.v("Cache mismatch due to change(s) in source directory")
+            # TODO:  Show some kind of additional details.  File count or possible file with the most recent mtime? ...
+            # display.vv("Cache mismatch due to changes to source directory")
+            return {}
+        else:
+            return cache_data
+
     def run(self, tmp=None, task_vars=None):
         ''' handler for ksconf app packaging operation '''
         if task_vars is None:
@@ -229,8 +330,10 @@ class ActionModule(ActionBase):
                 follow_symlink=dict(type="bool", default=False),
                 app_name=dict(type="str", default=None),
                 context=dict(type="dict", default=None),
+                cache_storage=dict(type="path", default="~/.cache/cdillc-splunk-ksconf-package")
             )
         )
+        # Does something need to be done with `validation_result`?
 
         source = params["source"]
         dest_file = params["file"]
@@ -243,6 +346,11 @@ class ActionModule(ActionBase):
         local = params["local"]
         follow_symlink = boolean(params["follow_symlink"])
         app_name = params["app_name"]
+        cache_storage = Path(params["cache_storage"])
+
+        # Fixup the 'layers' output (invocation/module_args/layers); drop empty
+        params["layers"] = {mode: pattern for layer in layers
+                            for mode, pattern in layer.items() if pattern}
 
         vault: VaultLib = self._loader._vault
         vault_editor = VaultEditor(vault)
@@ -281,6 +389,86 @@ class ActionModule(ActionBase):
             return failed(f"The source '{source}' is not a directory or is not accessible.")
 
         start_time = datetime.datetime.now()
+
+        cache_enabled = True
+        # TODO:  Add cache param:  Should be able to (1) enable, (2) disable, and (3) invalidate existing (write-only)
+
+        # Q:  Should encrypt mode disable automatically if 'encrypt' mode is enabled?  (If caching would dump 'template_vars' in the clear...)  Think
+
+        # TODO:  Make caching and templating place nicely:
+        #
+        #   (0) Ignore the problem, prove out the concept, and encourage intelligently use the 'template_vars' field.
+        #
+        #   (1) Explicit list of variables (no inheritance):
+        #       Require that everything goes through 'template_vars'.  As template_vars is already part of the unique
+        #       cache fingerprint, this doesn't require additional code.
+        #       Pros: easy to implement so fewer spots for bugs.  Simply disable cache if
+        #       Cons: Not super friendly.   ALL variables to be listed explicitly.
+        #             Not very smart:  Changes to ANY variable will require a full rebuild, even apps that don't use
+        #             variable expansion.
+        #            Store more variables on disk, including possible secrets.
+        #       One optimization could be that 'template_vars' could accept a list rather than just a dict.  So
+        #       variables could be listed, instead of being defined.
+        #   (2) Render/fingerprint all templates:
+        #       Scan app for templates (may require tweaks/optimizations to the ksconf layer mechanisms) and force
+        #       fresh render and capture output checksum, which would be added to the cache fingerprint.  Any changes
+        #       would trigger a miss, and full re-packaging.
+        #       Pros:  Very use friendly.
+        #              No penalties for non-templated apps.
+        #              No need to store variable values on disk (most secure option)
+        #              Correctly handles complex situations like a variable is removed and replaced with the same static
+        #              value.  And this is "free", no additional code needed for this.
+        #              Rendered checksum could be stored along with the source file metadata structure.
+        #       Cons:  Not the best performance.  Code more complex than #1.
+        #   (3) Detect variable use and capture just those.
+        #       Store metadata about each template in the fingerprint/cache data.  This would automatically determine
+        #       which jinaj2 variables were accessed and automatically record their names/values.
+        #       Pros:  User friendly / transparent.
+        #       Cons:  Store more variables on disk, including possible secrets.
+        #              Complex to code, and may not be possible...
+        #              Possible corner cases around situations when variables are added or removed.
+        #
+        # Will start with #0.  To prove it out.   (Currently leaning towards #1, but #2 may be the best long-term)
+
+        if cache_enabled:
+            try:
+                # Check for cache of previous execution with the same input params & source directory
+                if not cache_storage.is_dir():
+                    cache_storage.mkdir()
+                cache_id = self.get_cache_id(source, params)
+                cache_file = cache_storage / cache_id
+            except Exception as e:
+                display.display("Unhandled exception while initializing caching system. "
+                                f"Cache disabled due to {type(e).__name__}: {e}")
+                cache_file = None
+                result["cache"] = "failed initialization (disabled)"
+
+            cache_data = {}
+            if cache_file:
+                try:
+                    cache_data = self.load_cached_execution(cache_file, source)
+                except Exception as e:
+                    display.display("Unhandled exception occurred during cache loading.  "
+                                    f"Cache ignored due to {type(e).__name__}: {e}")
+                    result["cache"] = "failed load"
+
+            if cache_data:
+                result = cache_data["outputs"]
+                result["action"] = "cached"
+                result["cache"] = "hit"
+                result["changed"] = False
+                result["old_hash"] = result["new_hash"]  # hash values should always match
+
+                end_time = datetime.datetime.now()
+                delta = end_time - start_time
+                result["start"] = to_text(start_time)
+                result["end"] = to_text(end_time)
+                result["delta"] = to_text(delta)
+                return result
+            else:
+                result["cache"] = "miss"
+        else:
+            result["cache"] = "disabled"
 
         log_stream = StringIO()
 
@@ -412,6 +600,14 @@ class ActionModule(ActionBase):
             # result["layers"] = list(...)
             # Ideally, the manifest would contain this metadata as well.
 
+        result["new_hash"] = new_manifest.hash
+        result["old_hash"] = existing_manifest.hash if existing_manifest else ""
+
+        # WRITE CACHE HERE!
+        if cache_enabled and cache_file:
+            self.save_cached_execution(cache_file, source, params, result, archive_path)
+            result["cache"] = "created"
+
         end_time = datetime.datetime.now()
         delta = end_time - start_time
 
@@ -422,10 +618,4 @@ class ActionModule(ActionBase):
 
         result["changed"] = resulting_action != "unchanged"
 
-        result["new_hash"] = new_manifest.hash
-        result["old_hash"] = existing_manifest.hash if existing_manifest else ""
-
-        # Fixup the 'layers' output (invocation/module_args/layers); drop empty
-        params["layers"] = {mode: pattern for layer in layers
-                            for mode, pattern in layer.items() if pattern}
         return result
