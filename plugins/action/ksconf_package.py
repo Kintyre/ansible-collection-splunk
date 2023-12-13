@@ -203,6 +203,9 @@ class ActionModule(ActionBase):
         # Drop unwanted params and normalize
         for key in self.PARAMS_NO_CACHE:
             del params[key]
+        # Simplify layers to lists of [include/exclude, layer_name]
+        params["layers"] = [[mode, pattern] for layer in params["layers"]
+                            for mode, pattern in layer.items() if pattern]
         return params
 
     def get_cache_id(self, source: Path, params: dict) -> str:
@@ -347,10 +350,6 @@ class ActionModule(ActionBase):
         follow_symlink = boolean(params["follow_symlink"])
         app_name = params["app_name"]
         cache_storage = Path(params["cache_storage"])
-
-        # Fixup the 'layers' output (invocation/module_args/layers); drop empty
-        params["layers"] = {mode: pattern for layer in layers
-                            for mode, pattern in layer.items() if pattern}
 
         vault: VaultLib = self._loader._vault
         vault_editor = VaultEditor(vault)
@@ -607,6 +606,10 @@ class ActionModule(ActionBase):
         if cache_enabled and cache_file:
             self.save_cached_execution(cache_file, source, params, result, archive_path)
             result["cache"] = "created"
+
+        # Fixup the 'layers' output (invocation/module_args/layers); drop empty
+        params["layers"] = [{mode: pattern} for layer in layers
+                            for mode, pattern in layer.items() if pattern]
 
         end_time = datetime.datetime.now()
         delta = end_time - start_time

@@ -1,3 +1,6 @@
+## Release 0.25.1 (2023-12-13)
+* Address caching glitch with 'layers' input parameters.  This also fixes some incorrect adjustments to the invocation inputs as well.
+
 ## Release 0.25.0 (2023-12-12)
 * Add caching support to `ksconf_package` to speed up packaging, especially helpful when managing large apps.
 
