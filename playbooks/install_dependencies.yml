@@ -24,3 +24,5 @@
       ansible.builtin.pip:
         requirements: /tmp/cdillc-splunk-requirements.txt
         extra_args: "--upgrade"
+        virtualenv: "{{ venv_location | default(omit) }}"
+        virtualenv_command: "{{ ansible_python_interpreter }} -m venv"

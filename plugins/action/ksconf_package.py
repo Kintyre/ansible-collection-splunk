@@ -2,6 +2,28 @@
 #
 # ACTION:  (This runs on the controller!)
 #
+#
+# TODO: Add cache cleanup mechanism that runs periodically and reaps old cache files.  This could
+#       consider # of files, last used (if atime enabled).  This should also track a maintenance
+#       marker file to keep cleanup from happening back to back
+
+# TODO: Improve layer handling by matching against the included layers instead of capturing the
+#       literal layer filter rules (input params).  This allows competing layers but unused layers
+#       to coexist without creating multiple entries.
+#       Currently, it's possible for multiple cache files to point to the same archive file.
+#       Example:  Say a rule is {"include": "3?-region-{{region}}"}, and there are 2 regions.  If an
+#       app doesn't have either region layer, the app will be built once (region-a) and will create
+#       an archive.  When region-b is built, a new cache file is checked (because the layer rules
+#       changed), which means that a new temporary tarball will be built, the idempotent mechanism
+#       kicks in and determines that the app is "unchanged" and when the cache is saved, it points
+#       to the same archive.  This means that subsequent builds of the same app for either region
+#       will use the same archive, but via 2 different cached entries.   This inefficient when
+#       considering that many (most?) apps only have a smaller number of actual layers defined.
+#
+#       NOTE: This requires a full directory scan of the app but so does the FileSet() approach and
+#       we've proven that can be very fast.  Scanning directories is also needed to locate templates
+#       to eliminate false cache hits due to variable changes.  Future optimizations may be able to
+#       avoid re-reading the directory if that becomes a bottleneck.
 
 
 from __future__ import absolute_import, division, print_function
@@ -140,6 +162,10 @@ class LayerFile_AnsibleVault(LayerRenderedFile):
     # just one copy may be irrelevant to the big picture.  (Generally speaking, if your Ansible
     # controller is compromised, you've already lost.  But secure deletion is one step closer.
     use_secure_delete = True
+
+    # Assume that changes to the physical_path is deterministic of a content change.
+    # A cache-miss in a secret re-key scenario is completely acceptable
+    signature_requires_resource_hash = False
 
     @classmethod
     def set_vault(cls, vault: VaultLib):
@@ -479,11 +505,8 @@ class ActionModule(ActionBase):
         # TODO:  Add input directory caching/finger printing mechanism to speed-up when unchanged (via ksconf's FileSet)
         display.v(f"Packaging {app_name}   (App name {app_name_source})")
         packager = AppPackager(source, app_name, output=log_stream,
-                               template_variables=template_vars)
-
-        # Reminder: move to constructor (once ksconf>=v0.11.5 dependency)
-        packager.predictable_mtime = False
-
+                               template_variables=template_vars,
+                               predictable_mtime=False)
         with packager:
             # combine expects as list of (action, pattern)
             layer_filter = [(mode, pattern) for layer in layers
