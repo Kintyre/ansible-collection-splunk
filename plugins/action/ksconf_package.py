@@ -67,9 +67,9 @@ if ksconf_version < ksconf_min_version:
 
 
 from ksconf.app.manifest import create_manifest_from_archive, load_manifest_for_archive  # noqa
-from ksconf.builder.cache import FileSet, fingerprint_stat  # noqa
+from ksconf.builder.cache import fingerprint_stat  # noqa
 from ksconf.conf.parser import ConfParserException, parse_string  # noqa
-from ksconf.layer import LayerRenderedFile, layer_file_factory, register_file_handler  # noqa
+from ksconf.layer import LayerRenderedFile, layer_file_factory, register_file_handler, build_layer_collection, LayerContext, LayerCollectionBase  # noqa
 from ksconf.package import AppPackager  # noqa
 from ksconf.util.file import atomic_open  # noqa
 
@@ -222,23 +222,22 @@ class ActionModule(ActionBase):
     # Don't support moving files.  Everything is done on the controller
     TRANSFERS_FILES = False
 
-    PARAMS_NO_CACHE = {"source", "context", "cache_storage"}
+    PARAMS_NO_CACHE = {"source", "context", "cache_storage", "layers"}
 
     def filter_params(self, params: dict) -> dict:
         params = dict(params)
         # Drop unwanted params and normalize
         for key in self.PARAMS_NO_CACHE:
             del params[key]
-        # Simplify layers to lists of [include/exclude, layer_name]
-        params["layers"] = [[mode, pattern] for layer in params["layers"]
-                            for mode, pattern in layer.items() if pattern]
         return params
 
-    def get_cache_id(self, source: Path, params: dict) -> str:
+    def get_cache_id(self, source: Path, params: dict,
+                     layers: list[str]) -> str:
         # Build a unique fingerprint for the combination of (1) input parameters,
         # and (2) signature of the 'source' directory
         source = Path(source)
         cache_params = self.filter_params(params)
+        cache_params["layers"] = layers
         h = hashlib.new("sha256")
         content = json.dumps(cache_params, indent=0, sort_keys=True)
         h.update(content.encode("utf-8"))
@@ -258,11 +257,7 @@ class ActionModule(ActionBase):
             "version": collection_version,
         }
         assert cache_data["outputs"]["archive"] == os.fspath(output_file)
-
-        # TODO:  Optimize this so we don't have to recalculate this
-        source_fileset = FileSet.from_filesystem(Path(source), fingerprint=fingerprint_stat)
-        cache_data["source"] = source_fileset.to_cache()
-
+        cache_data["source"] = self.layer_collection.calculate_signature(key_factory=os.fspath)
         cache_data["output_fingerprint"] = fingerprint_stat(output_file)
 
         display.vvv(f"Cache data to {cache_file} with content:  {cache_data!r}")
@@ -311,10 +306,10 @@ class ActionModule(ActionBase):
                       "by adding '[[ layers_hash ]]' if role-specific ksconf layers are in use.")
             return {}
 
-        fileset_cache = FileSet.from_cache(cache_data["source"], fingerprint=fingerprint_stat)
-        fileset_live = FileSet.from_filesystem(Path(source), fingerprint=fingerprint_stat)
+        sig_cache = cache_data["source"]
+        sig_live = self.layer_collection.calculate_signature(key_factory=os.fspath)
 
-        if fileset_cache != fileset_live:
+        if sig_cache != sig_live:
             display.v("Cache mismatch due to change(s) in source directory")
             # TODO:  Show some kind of additional details.  File count or possible file with the most recent mtime? ...
             # display.vv("Cache mismatch due to changes to source directory")
@@ -455,12 +450,24 @@ class ActionModule(ActionBase):
         #
         # Will start with #0.  To prove it out.   (Currently leaning towards #1, but #2 may be the best long-term)
 
+        layer_context = LayerContext(follow_symlink=follow_symlink,
+                                     template_variables=template_vars)
+        layer_filters = [(mode, pattern) for layer in layers
+                         for mode, pattern in layer.items() if pattern]
+        if layer_filters:
+            display.vv(f"Applying layer filter:  {layer_filters}")
+        self.layer_collection = build_layer_collection(
+            source,
+            layer_method,
+            context=layer_context,
+            filters=layer_filters)
         if cache_enabled:
             try:
                 # Check for cache of previous execution with the same input params & source directory
                 if not cache_storage.is_dir():
                     cache_storage.mkdir()
-                cache_id = self.get_cache_id(source, params)
+                cache_id = self.get_cache_id(source, params,
+                                             self.layer_collection.list_layer_names())
                 cache_file = cache_storage / cache_id
             except Exception as e:
                 display.display("Unhandled exception while initializing caching system. "
@@ -502,20 +509,12 @@ class ActionModule(ActionBase):
             app_name = os.path.basename(source)
             app_name_source = "taken from source directory"
 
-        # TODO:  Add input directory caching/finger printing mechanism to speed-up when unchanged (via ksconf's FileSet)
         display.v(f"Packaging {app_name}   (App name {app_name_source})")
         packager = AppPackager(source, app_name, output=log_stream,
                                template_variables=template_vars,
                                predictable_mtime=False)
         with packager:
-            # combine expects as list of (action, pattern)
-            layer_filter = [(mode, pattern) for layer in layers
-                            for mode, pattern in layer.items() if pattern]
-            if layer_filter:
-                display.vv(f"Applying layer filter:  {layer_filter}")
-            packager.combine(source, layer_filter,
-                             layer_method=layer_method,
-                             allow_symlink=follow_symlink)
+            packager.combine_from_layer(self.layer_collection)
             # Handle local files
             if local == "promote":
                 packager.merge_local()
