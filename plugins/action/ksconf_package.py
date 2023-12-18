@@ -7,25 +7,6 @@
 #       consider # of files, last used (if atime enabled).  This should also track a maintenance
 #       marker file to keep cleanup from happening back to back
 
-# TODO: Improve layer handling by matching against the included layers instead of capturing the
-#       literal layer filter rules (input params).  This allows competing layers but unused layers
-#       to coexist without creating multiple entries.
-#       Currently, it's possible for multiple cache files to point to the same archive file.
-#       Example:  Say a rule is {"include": "3?-region-{{region}}"}, and there are 2 regions.  If an
-#       app doesn't have either region layer, the app will be built once (region-a) and will create
-#       an archive.  When region-b is built, a new cache file is checked (because the layer rules
-#       changed), which means that a new temporary tarball will be built, the idempotent mechanism
-#       kicks in and determines that the app is "unchanged" and when the cache is saved, it points
-#       to the same archive.  This means that subsequent builds of the same app for either region
-#       will use the same archive, but via 2 different cached entries.   This inefficient when
-#       considering that many (most?) apps only have a smaller number of actual layers defined.
-#
-#       NOTE: This requires a full directory scan of the app but so does the FileSet() approach and
-#       we've proven that can be very fast.  Scanning directories is also needed to locate templates
-#       to eliminate false cache hits due to variable changes.  Future optimizations may be able to
-#       avoid re-reading the directory if that becomes a bottleneck.
-
-
 from __future__ import absolute_import, division, print_function
 
 import datetime
@@ -57,7 +38,7 @@ JINJA_HANDLERS = ["ansible", "ansible-jinja"]
 TEMPLATE_HANDLERS = JINJA_HANDLERS
 
 
-ksconf_min_version = (0, 13, 7)
+ksconf_min_version = (0, 13, 8)
 ksconf_min_version_text = ".".join(f"{i}" for i in ksconf_min_version)
 
 ksconf_version = check_ksconf_version()
@@ -69,7 +50,7 @@ if ksconf_version < ksconf_min_version:
 from ksconf.app.manifest import create_manifest_from_archive, load_manifest_for_archive  # noqa
 from ksconf.builder.cache import fingerprint_stat  # noqa
 from ksconf.conf.parser import ConfParserException, parse_string  # noqa
-from ksconf.layer import LayerRenderedFile, layer_file_factory, register_file_handler, build_layer_collection, LayerContext, LayerCollectionBase  # noqa
+from ksconf.layer import LayerRenderedFile, layer_file_factory, register_file_handler, build_layer_collection, LayerContext, LayerCollectionBase, LayerFilter  # noqa
 from ksconf.package import AppPackager  # noqa
 from ksconf.util.file import atomic_open  # noqa
 
@@ -94,6 +75,14 @@ class LayerFile_AnsibleJinja2(LayerRenderedFile):
     module: ActionBase = None
     _templar: Templar = None
 
+    # Note that sometimes this is overridden by the Ansible module logic, if output encryption
+    # is enabled.  Otherwise, assume no secrets are rendered.
+    use_secure_delete = False
+
+    # Tell the LayerRenderedFile class that we *must* rendered templates because external
+    # variables could change between runs.  This ensures deterministic behavior.
+    signature_requires_resource_hash = True
+
     @classmethod
     def set_module(cls, module: ActionBase):
         cls._templar = module._templar
@@ -115,6 +104,8 @@ class LayerFile_AnsibleJinja2(LayerRenderedFile):
         }
         if self.layer.context.template_variables:
             updates["available_variables"] = self.layer.context.template_variable
+        # TODO: Should we offer some standard variables?  Something as simple as 'app_name' can be super helpful
+        #       to avoid hard dependencies on the folder name of an app.
         templar = self._templar.copy_with_new_env(**updates)
         return templar
 
@@ -224,20 +215,21 @@ class ActionModule(ActionBase):
 
     PARAMS_NO_CACHE = {"source", "context", "cache_storage", "layers"}
 
-    def filter_params(self, params: dict) -> dict:
+    def build_cache_params(self, params: dict, collection: LayerCollectionBase) -> dict:
         params = dict(params)
         # Drop unwanted params and normalize
         for key in self.PARAMS_NO_CACHE:
             del params[key]
+        params["layers"] = collection.list_layer_names()
         return params
 
-    def get_cache_id(self, source: Path, params: dict,
-                     layers: list[str]) -> str:
-        # Build a unique fingerprint for the combination of (1) input parameters,
-        # and (2) signature of the 'source' directory
+    def get_cache_id(self, source: Path, params: dict, collection: LayerCollectionBase) -> str:
+        """
+        Build a unique fingerprint for the combination of (1) input parameters,
+        and (2) actual list of layers that are enabled
+        """
         source = Path(source)
-        cache_params = self.filter_params(params)
-        cache_params["layers"] = layers
+        cache_params = self.build_cache_params(params, collection)
         h = hashlib.new("sha256")
         content = json.dumps(cache_params, indent=0, sort_keys=True)
         h.update(content.encode("utf-8"))
@@ -246,18 +238,18 @@ class ActionModule(ActionBase):
 
     def save_cached_execution(self,
                               cache_file: Path,
-                              source: str,
+                              collection: LayerCollectionBase,
                               inputs: dict,
                               outputs: dict,
                               output_file: Path) -> bool:
-
+        """ Store cache after successful app package creation. """
         cache_data = {
-            "inputs": self.filter_params(inputs),   # Not really used; for troubleshooting
+            "inputs": self.build_cache_params(inputs, collection),   # Not really used; for troubleshooting
             "outputs": outputs,
             "version": collection_version,
         }
         assert cache_data["outputs"]["archive"] == os.fspath(output_file)
-        cache_data["source"] = self.layer_collection.calculate_signature(key_factory=os.fspath)
+        cache_data["source"] = collection.calculate_signature(key_factory=os.fspath)
         cache_data["output_fingerprint"] = fingerprint_stat(output_file)
 
         display.vvv(f"Cache data to {cache_file} with content:  {cache_data!r}")
@@ -274,8 +266,9 @@ class ActionModule(ActionBase):
 
     def load_cached_execution(self,
                               cache_file: Path,
-                              source: str) -> dict:
+                              collection: LayerCollectionBase) -> dict:
         try:
+            display.vvvv(f"Loading cache from file {cache_file}")
             with open(cache_file) as cache_fp:
                 cache_data = json.load(cache_fp)
         except IOError as e:
@@ -306,13 +299,19 @@ class ActionModule(ActionBase):
                       "by adding '[[ layers_hash ]]' if role-specific ksconf layers are in use.")
             return {}
 
+        display.v("Looking for FS changes to app source directory....")
+        # Confirm that the signature of the cached app matches the live (on-disk) app (detect fs changes)
         sig_cache = cache_data["source"]
-        sig_live = self.layer_collection.calculate_signature(key_factory=os.fspath)
+        sig_live = collection.calculate_signature(key_factory=os.fspath)
+        # display.vvv(f"CACHE:  {sig_cache}")
+        # display.vvv(f"LIVE:   {sig_live}")
 
         if sig_cache != sig_live:
             display.v("Cache mismatch due to change(s) in source directory")
             # TODO:  Show some kind of additional details.  File count or possible file with the most recent mtime? ...
             # display.vv("Cache mismatch due to changes to source directory")
+            if len(sig_cache) != len(sig_live):
+                display.vv(f"File count {len(sig_cache)} vs {len(sig_live)}")
             return {}
         else:
             return cache_data
@@ -413,61 +412,24 @@ class ActionModule(ActionBase):
         cache_enabled = True
         # TODO:  Add cache param:  Should be able to (1) enable, (2) disable, and (3) invalidate existing (write-only)
 
-        # Q:  Should encrypt mode disable automatically if 'encrypt' mode is enabled?  (If caching would dump 'template_vars' in the clear...)  Think
-
-        # TODO:  Make caching and templating place nicely:
-        #
-        #   (0) Ignore the problem, prove out the concept, and encourage intelligently use the 'template_vars' field.
-        #
-        #   (1) Explicit list of variables (no inheritance):
-        #       Require that everything goes through 'template_vars'.  As template_vars is already part of the unique
-        #       cache fingerprint, this doesn't require additional code.
-        #       Pros: easy to implement so fewer spots for bugs.  Simply disable cache if
-        #       Cons: Not super friendly.   ALL variables to be listed explicitly.
-        #             Not very smart:  Changes to ANY variable will require a full rebuild, even apps that don't use
-        #             variable expansion.
-        #            Store more variables on disk, including possible secrets.
-        #       One optimization could be that 'template_vars' could accept a list rather than just a dict.  So
-        #       variables could be listed, instead of being defined.
-        #   (2) Render/fingerprint all templates:
-        #       Scan app for templates (may require tweaks/optimizations to the ksconf layer mechanisms) and force
-        #       fresh render and capture output checksum, which would be added to the cache fingerprint.  Any changes
-        #       would trigger a miss, and full re-packaging.
-        #       Pros:  Very use friendly.
-        #              No penalties for non-templated apps.
-        #              No need to store variable values on disk (most secure option)
-        #              Correctly handles complex situations like a variable is removed and replaced with the same static
-        #              value.  And this is "free", no additional code needed for this.
-        #              Rendered checksum could be stored along with the source file metadata structure.
-        #       Cons:  Not the best performance.  Code more complex than #1.
-        #   (3) Detect variable use and capture just those.
-        #       Store metadata about each template in the fingerprint/cache data.  This would automatically determine
-        #       which jinaj2 variables were accessed and automatically record their names/values.
-        #       Pros:  User friendly / transparent.
-        #       Cons:  Store more variables on disk, including possible secrets.
-        #              Complex to code, and may not be possible...
-        #              Possible corner cases around situations when variables are added or removed.
-        #
-        # Will start with #0.  To prove it out.   (Currently leaning towards #1, but #2 may be the best long-term)
-
         layer_context = LayerContext(follow_symlink=follow_symlink,
                                      template_variables=template_vars)
         layer_filters = [(mode, pattern) for layer in layers
                          for mode, pattern in layer.items() if pattern]
-        if layer_filters:
-            display.vv(f"Applying layer filter:  {layer_filters}")
-        self.layer_collection = build_layer_collection(
+
+        layer_collection = build_layer_collection(
             source,
             layer_method,
-            context=layer_context,
-            filters=layer_filters)
+            context=layer_context)
+        if layer_filters:
+            display.vv(f"Applying layer filter:  {layer_filters}")
+            layer_collection.apply_filter(LayerFilter().add_rules(layer_filters))
         if cache_enabled:
             try:
                 # Check for cache of previous execution with the same input params & source directory
                 if not cache_storage.is_dir():
                     cache_storage.mkdir()
-                cache_id = self.get_cache_id(source, params,
-                                             self.layer_collection.list_layer_names())
+                cache_id = self.get_cache_id(source, params, layer_collection)
                 cache_file = cache_storage / cache_id
             except Exception as e:
                 display.display("Unhandled exception while initializing caching system. "
@@ -478,7 +440,7 @@ class ActionModule(ActionBase):
             cache_data = {}
             if cache_file:
                 try:
-                    cache_data = self.load_cached_execution(cache_file, source)
+                    cache_data = self.load_cached_execution(cache_file, layer_collection)
                 except Exception as e:
                     display.display("Unhandled exception occurred during cache loading.  "
                                     f"Cache ignored due to {type(e).__name__}: {e}")
@@ -514,7 +476,7 @@ class ActionModule(ActionBase):
                                template_variables=template_vars,
                                predictable_mtime=False)
         with packager:
-            packager.combine_from_layer(self.layer_collection)
+            packager.combine_from_layer(layer_collection)
             # Handle local files
             if local == "promote":
                 packager.merge_local()
@@ -554,7 +516,7 @@ class ActionModule(ActionBase):
             result["encryption"] = "false"
             decrypted_size = None
 
-            # Make this idempotent by checking for the output tarball, and determining if the app content changed
+            # Make idempotent by checking for the output tarball, and determining if the app content changed
             if archive_path.is_file():
                 if is_vault_file(archive_path):
                     with temp_decrypt(archive_path, vault,
@@ -624,9 +586,9 @@ class ActionModule(ActionBase):
         result["new_hash"] = new_manifest.hash
         result["old_hash"] = existing_manifest.hash if existing_manifest else ""
 
-        # WRITE CACHE HERE!
+        # Store cache for subsequent runs
         if cache_enabled and cache_file:
-            self.save_cached_execution(cache_file, source, params, result, archive_path)
+            self.save_cached_execution(cache_file, layer_collection, params, result, archive_path)
             result["cache"] = "created"
 
         # Fixup the 'layers' output (invocation/module_args/layers); drop empty
