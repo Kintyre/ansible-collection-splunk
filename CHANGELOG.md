@@ -1,3 +1,6 @@
+## Release 0.26.2
+* Add some basic custom stats to the `ksconf_package` command.  (This is still a proof-of-concept)
+
 ## Release 0.26.1 (2023-12-18)
 * Add new `cache` parameter to `ksconf_package` to allow for control over the caching behavior.
   Docs were also updated in many places to more accurately represent the current implementation.

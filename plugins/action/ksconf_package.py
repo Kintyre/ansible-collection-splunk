@@ -243,6 +243,9 @@ class ActionModule(ActionBase):
                               outputs: dict,
                               output_file: Path) -> bool:
         """ Store cache after successful app package creation. """
+        outputs = dict(outputs)
+        if "ansible_stats" in outputs:
+            del outputs["ansible_stats"]
         cache_data = {
             "inputs": self.build_cache_params(inputs, collection),   # Not really used; for troubleshooting
             "outputs": outputs,
@@ -426,6 +429,16 @@ class ActionModule(ActionBase):
             display.vv(f"Applying layer filter:  {layer_filters}")
             layer_collection.apply_filter(LayerFilter().add_rules(layer_filters))
 
+        stats = {
+            "ksconf_package_invocations": 1,
+        }
+        if True:    # stats_enabled
+            result["ansible_stats"] = {
+                "data": stats,
+                "aggregate": True,
+                "per_host": False,
+            }
+
         cache_file = None
         if cache in ("on", "rebuild", "read-only"):
             try:
@@ -450,7 +463,7 @@ class ActionModule(ActionBase):
                     result["cache"] = "failed load"
 
             if cache_data:
-                result = cache_data["outputs"]
+                result.update(cache_data["outputs"])
                 result["action"] = "cached"
                 result["cache"] = "hit"
                 result["changed"] = False
@@ -461,6 +474,9 @@ class ActionModule(ActionBase):
                 result["start"] = to_text(start_time)
                 result["end"] = to_text(end_time)
                 result["delta"] = to_text(delta)
+
+                stats["ksconf_package_action_" + result['action']] = 1
+                stats["ksconf_package_time_cached"] = delta.total_seconds()
                 return result
             else:
                 result["cache"] = "miss"
@@ -606,6 +622,9 @@ class ActionModule(ActionBase):
         result["end"] = to_text(end_time)
         result["delta"] = to_text(delta)
         result["stdout"] = to_text(log_stream.getvalue())
+
+        stats["ksconf_package_action_" + result['action']] = 1
+        stats["ksconf_package_time_packaging"] = delta.total_seconds()
 
         result["changed"] = resulting_action != "unchanged"
 
