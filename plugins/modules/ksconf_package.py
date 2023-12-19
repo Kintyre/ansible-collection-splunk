@@ -153,8 +153,8 @@ options:
             - This dictionary can be structured any way that's helpful.
               There are no restrictions imposed, but be aware that sending more variables than
               needed could result in extra processing.
-            - Caching speedups are based on building a hash of contents of I(template_vars) and
-              other inputs.
+            - When using the C(ansible-jinja) handler, these values will be added to existing Ansible variables.
+              Variables set here will have the highest precedence.
         type: dict
         required: false
         default: {}
@@ -178,10 +178,24 @@ options:
 
     cache_storage:
         description:
-          - Path to local cache storage.
-          - Avoid sharing this too broadly, for example in a multitenant scenario.
+            - Path to local cache storage.
+            - Avoid sharing this too broadly, for example in a multitenant scenario.
         type: path
         default: ~/.cache/cdillc-splunk-ksconf-package
+
+    cache:
+        description:
+            - Control caching behavior.
+            - To fully enable or disable cache use C(on) or C(off).
+              Use C(rebuild) to ignore an existing cache entries and force but allow cache to be stored.
+              C(read-only) allows existing cache to be used but writes or updates to cache is prohibited.
+              Generally C(rebuild) and C(read-only) shouldn't be necessary unless debugging the caching mechanism
+              or a bug is found or suspected.
+            - Note that using C(rebuild) may not result in an actual C(updated) I(action).
+              The package will fully repackaged internally but this does not bypass the idempotent mechanism.
+              Please see the general notes for additional explanation of this behavior.
+        choices: ["on", "off", "rebuild", "read-only"]
+        default: "on"
 
 # set_version
 # set_build
@@ -207,30 +221,40 @@ notes:
       To speed this up a cached C(.manifest) file is stored along side I(file) so that the
       previous hash doesn't need to be recalculated in many cases.
       As this requires a non-trivial amount of work for larger apps, this can feel slow.
-    - As of v0.25. caching behavior is supported to reduce the amount of work that needs to be done
+    - As of v0.26 caching behavior is supported to reduce the amount of work that needs to be done
       in many no-change operations.
+      (Please avoid the first attempt of caching support added v0.25.)
       Caching is implemented by saving the output of previous runs and determining if any parameters
       or if the I(source) directory itself has undergone any changes since the last execution.
       A cache hit occurs when no changes have been detected, and therefore reuse occurs;
       the output file and return values are re-used from a previous execution.
 
-      Specifically any change to I(file), I(block), I(layer_method), I(layers), I(local),
-      I(follow_symlink), I(app_name), I(template_vars), or I(encrypt) can modify the resulting
+      Specifically any change to I(file), I(block), I(layer_method), I(local),
+      I(follow_symlink), I(app_name), or I(encrypt) can modify the resulting
       tarball, and therefore will trigger a cache miss.
-      Additionally, the entire I(source) directory is scanned for changes.
-      Any change will trigger a full rebuild, even if the change is to a file that is blocked or is
-      contained within an excluded layer.
+      Any I(layers) given are also taken into consideration, but only changes to which layers match
+      or the content within those layers will result in a cache miss.
+      For non-layered apps, the entire I(source) directory is scanned for changes
+      Any change will trigger a full rebuild, even if the change is to a file that is blocked.
 
       Change detection for I(source) is based on file name, size, timestamps and not a hash.
       This allows quick execution when no inputs have changed which is a very common scenario.
-
-      Basic tampering should be detected, for example, if the I(file) itself changed, then a cache
-      miss will be forced.
-
+      Templates are handled differently from normal files.
+      All templates are expanded and a hash of the rendered content is compared.
+      This is more expensive, but it ensures that templates or variable changes are handled predictably.
     - |
-      Known limitations:  There are issues with caching and the use of templates that can result in a
-      cache hits at inappropriate times.
-      Currently the only workaround is to manually purge the cache, but better behavior is planned.
+      How to force a I(changed) outcome?  Or, how to force an app re-deployment.
+      This is a bit difficult to do by design and should not be necessary most of the time.
+      Both caching and idempotent mechanisms will attempt to keep avoid unnecessary changes.
+      So simply clearing the cache, or deleting the manifest file is not enough.
+      Simply touching a files modification time will trigger a cache miss, but ultimately will report
+      C(action=unchanged) as there is no change to the actual content.
+      To force a change result (or I(created) action), either change the actual content of a file, or
+      remove the I(archive) file from the filesystem.
+      Also keep in mind that if the ultimate goal is to trigger an app re-install and if installation is
+      handle by M(cdillc.splunk.ksconf_app_sideload), then simply removing the I(archive) file will still
+      be irrelevant as that module also builds a local manifest in attempt to avoid unnecessary installations,
+      unless app content has changed.
 
     - When using both templates and layering, be aware that Jinja2 templates are expanded before
       layer filtering.  This allows one layer to include C(indexes.conf) and another layer to
@@ -324,10 +348,10 @@ context:
 cache:
     description:
       - Cache result status or message in case of a cache error.
-      - Values include:  C(hit), C(miss), C(created), C(disabled).
+      - Values include:  C(hit), C(miss), C(created), C(updated), or C(disabled).
         Other values start with C(failed) and a reason message.
-        Note that C(miss) will rarely occur unless new cache cannot be created.
-        C(created) implies a cache miss.
+        Note that C(miss) will rarely occur unless new cache cannot be created or if I(cache) is set to C(read-only).
+        Both C(updated) and C(created) imply a cache miss.
     type: dict
     returned: always
 

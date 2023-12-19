@@ -1,3 +1,7 @@
+## Release 0.26.1 (2023-12-18)
+* Add new `cache` parameter to `ksconf_package` to allow for control over the caching behavior.
+  Docs were also updated in many places to more accurately represent the current implementation.
+
 ## Release 0.26.0 (2023-12-18)
 * Revamp new `ksconf_package` caching mechanism to (1) be explicit about which layers are actually in-use, and (2) pre-render templates as part of source change detection.
   In combination, these improvements reduce the likelihood of incorrect cache hits and some corner case cache misses due to irrelevant changes.

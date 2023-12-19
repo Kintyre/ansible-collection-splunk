@@ -213,7 +213,7 @@ class ActionModule(ActionBase):
     # Don't support moving files.  Everything is done on the controller
     TRANSFERS_FILES = False
 
-    PARAMS_NO_CACHE = {"source", "context", "cache_storage", "layers"}
+    PARAMS_NO_CACHE = {"source", "context", "cache_storage", "layers", "cache", "template_vars"}
 
     def build_cache_params(self, params: dict, collection: LayerCollectionBase) -> dict:
         params = dict(params)
@@ -299,7 +299,7 @@ class ActionModule(ActionBase):
                       "by adding '[[ layers_hash ]]' if role-specific ksconf layers are in use.")
             return {}
 
-        display.v("Looking for FS changes to app source directory....")
+        display.vv("Looking for FS changes to app source directory....")
         # Confirm that the signature of the cached app matches the live (on-disk) app (detect fs changes)
         sig_cache = cache_data["source"]
         sig_live = collection.calculate_signature(key_factory=os.fspath)
@@ -353,6 +353,9 @@ class ActionModule(ActionBase):
                 follow_symlink=dict(type="bool", default=False),
                 app_name=dict(type="str", default=None),
                 context=dict(type="dict", default=None),
+                cache=dict(type="str",
+                           choices=["on", "off", "rebuild", "read-only"],
+                           default="on"),
                 cache_storage=dict(type="path", default="~/.cache/cdillc-splunk-ksconf-package")
             )
         )
@@ -370,6 +373,7 @@ class ActionModule(ActionBase):
         follow_symlink = boolean(params["follow_symlink"])
         app_name = params["app_name"]
         cache_storage = Path(params["cache_storage"])
+        cache = params["cache"]
 
         vault: VaultLib = self._loader._vault
         vault_editor = VaultEditor(vault)
@@ -409,9 +413,6 @@ class ActionModule(ActionBase):
 
         start_time = datetime.datetime.now()
 
-        cache_enabled = True
-        # TODO:  Add cache param:  Should be able to (1) enable, (2) disable, and (3) invalidate existing (write-only)
-
         layer_context = LayerContext(follow_symlink=follow_symlink,
                                      template_variables=template_vars)
         layer_filters = [(mode, pattern) for layer in layers
@@ -424,7 +425,9 @@ class ActionModule(ActionBase):
         if layer_filters:
             display.vv(f"Applying layer filter:  {layer_filters}")
             layer_collection.apply_filter(LayerFilter().add_rules(layer_filters))
-        if cache_enabled:
+
+        cache_file = None
+        if cache in ("on", "rebuild", "read-only"):
             try:
                 # Check for cache of previous execution with the same input params & source directory
                 if not cache_storage.is_dir():
@@ -438,7 +441,7 @@ class ActionModule(ActionBase):
                 result["cache"] = "failed initialization (disabled)"
 
             cache_data = {}
-            if cache_file:
+            if cache_file and cache != "rebuild":
                 try:
                     cache_data = self.load_cached_execution(cache_file, layer_collection)
                 except Exception as e:
@@ -587,9 +590,10 @@ class ActionModule(ActionBase):
         result["old_hash"] = existing_manifest.hash if existing_manifest else ""
 
         # Store cache for subsequent runs
-        if cache_enabled and cache_file:
+        if cache_file and cache in ("on", "rebuild"):
+            cache_new = not cache_file.is_file()
             self.save_cached_execution(cache_file, layer_collection, params, result, archive_path)
-            result["cache"] = "created"
+            result["cache"] = "created" if cache_new else "updated"
 
         # Fixup the 'layers' output (invocation/module_args/layers); drop empty
         params["layers"] = [{mode: pattern} for layer in layers
