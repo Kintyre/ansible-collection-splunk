@@ -56,10 +56,10 @@ options:
         required: true
 
     file:
-        description: >
+        description:
             - Tarball file created of the app.  This can be I(.spl) or I(.tar.gz)
             - This parameter supports dynamic placeholders.
-              Variables are listed L(here,https://ksconf.readthedocs.io/en/stable/cmd_package.html#variables)
+              Variables are listed L(here,https://ksconf.readthedocs.io/en/stable/cmd_package.html#variables).
             - This value may require extra planning in scenarios where ksconf layers are in use
               and/or when templates are being used in combinations with variables.
               Any time a single I(source) input directory is used to build multiple variations or
@@ -348,7 +348,8 @@ context:
 cache:
     description:
       - Cache result status or message in case of a cache error.
-      - Values include:  C(hit), C(miss), C(created), C(updated), or C(disabled).
+      - |
+        Values include:  C(hit), C(miss), C(created), C(updated), or C(disabled).
         Other values start with C(failed) and a reason message.
         Note that C(miss) will rarely occur unless new cache cannot be created or if I(cache) is set to C(read-only).
         Both C(updated) and C(created) imply a cache miss.
